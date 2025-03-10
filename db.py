@@ -31,8 +31,8 @@ def load_demo_flights():
             scheduledTime=datetime(2025, 3, 15, 9, 0),
             arrivalTime=None,
             status="Scheduled",
-            gate="G2",  # Назначаем гейт, так как "depart"
-            planeParking="P1",  # Назначаем парковку, так как "depart"
+            gate="G-2",  # Назначаем гейт, так как "depart"
+            planeParking="P-1",  # Назначаем парковку, так как "depart"
             runway=None
         ),
         FlightData(
@@ -46,7 +46,7 @@ def load_demo_flights():
             status="Scheduled",
             gate=None,  # Не назначаем гейт, ждём Ground Control
             planeParking=None,  # Не назначаем парковку, ждём Ground Control
-            runway="R2"  # Указываем ВПП для посадки
+            runway="R-2"  # Указываем ВПП для посадки
         ),
         FlightData(
             flightId="FL456",
@@ -57,8 +57,8 @@ def load_demo_flights():
             scheduledTime=datetime(2025, 3, 15, 19, 0),
             arrivalTime=None,
             status="Scheduled",
-            gate="G3",  # Назначаем гейт, так как "depart"
-            planeParking="P2",  # Назначаем парковку, так как "depart"
+            gate="G-3",  # Назначаем гейт, так как "depart"
+            planeParking="P-2",  # Назначаем парковку, так как "depart"
             runway=None
         ),
     ]

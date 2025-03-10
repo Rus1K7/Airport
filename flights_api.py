@@ -22,33 +22,32 @@ QUEUE_NAME = "flight.status.changed"
 
 def publish_to_rabbitmq(flight_id: str, status: str):
     try:
-        # Установка соединения с RabbitMQ
         parameters = pika.URLParameters(RABBITMQ_URL)
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
 
-        # Объявляем очередь
-        channel.queue_declare(queue=QUEUE_NAME, durable=True)
+        # Passively check if the queue exists (won't modify it)
+        channel.queue_declare(queue=QUEUE_NAME, passive=True)
 
-        # Формируем сообщение
-        message = {
-            "flightId": flight_id,
-            "status": status
-        }
+        # If we reach here, the queue exists and we can proceed
+        message = {"flightId": flight_id, "status": status}
         body = json.dumps(message)
-
-        # Отправляем сообщение
         channel.basic_publish(
             exchange='',
             routing_key=QUEUE_NAME,
             body=body.encode(),
-            properties=pika.BasicProperties(delivery_mode=2)  # Делаем сообщение устойчивым
+            properties=pika.BasicProperties(delivery_mode=2)
         )
         logger.info(f"Отправлено сообщение в RabbitMQ: {message}")
         connection.close()
+    except pika.exceptions.ChannelClosedByBroker as e:
+        # If passive declaration fails due to mismatch, handle it
+        if e.reply_code == 406:
+            logger.warning("Queue exists with incompatible settings. Consider aligning settings or deleting the queue.")
+        raise
     except Exception as e:
         logger.error(f"Ошибка при отправке в RabbitMQ: {e}")
-
+        raise
 
 scheduler = BackgroundScheduler()
 
@@ -63,16 +62,23 @@ def update_flight_statuses():
         delta = flight.scheduledTime - sim_time
         minutes_left = delta.total_seconds() / 60.0
 
-        if minutes_left <= 0:
-            flight.status = "Departed" if flight.type == "depart" else "Arrived"
-        elif minutes_left <= 5:
-            flight.status = "Boarding"
-        elif minutes_left <= 10:
-            flight.status = "RegistrationClosed"
-        elif minutes_left <= 40:
-            flight.status = "RegistrationOpen"
-        else:
-            flight.status = "Scheduled"
+        if flight.type == "depart":
+            if minutes_left <= 0:
+                flight.status = "Departed"
+            elif minutes_left <= 5:
+                flight.status = "Boarding"
+            elif minutes_left <= 10:
+                flight.status = "RegistrationClosed"
+            elif minutes_left <= 40:
+                flight.status = "RegistrationOpen"
+            else:
+                flight.status = "Scheduled"
+        elif flight.type == "arrive":
+            if minutes_left <= 0:
+                flight.status = "Arrived"
+            else:
+                # Для прилета можно оставить статус Scheduled (или задать иной, например "EnRoute")
+                flight.status = "Scheduled"
 
         # Если статус изменился, отправляем сообщение в RabbitMQ
         if old_status != flight.status:
@@ -163,4 +169,4 @@ def set_simulation_speed_endpoint(speed: int = Body(...)):
 
 
 if __name__ == "__main__":
-    uvicorn.run("flights_api:app", host="172.20.10.2", port=8003, reload=True)  # Исправил хост на ваш предыдущий
+    uvicorn.run("flights_api:app", host="localhost", port=8003, reload=True)  # Исправил хост на ваш предыдущий

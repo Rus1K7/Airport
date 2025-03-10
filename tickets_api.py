@@ -8,14 +8,16 @@ import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
 
+# Настройка логгера
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("TicketsAPI")
 
-# URL модуля "Табло" с новым IP-адресом
-TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло на 192.168.32.3:8003
+# URL модулей
+TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло
+CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin" # Check-In
 MAX_TICKETS_PER_FLIGHT = 100
 
-# Модель для тела запроса
+# Модель для запроса покупки билета
 class BuyTicketRequest(BaseModel):
     passengerId: str
     passengerName: str
@@ -24,6 +26,7 @@ class BuyTicketRequest(BaseModel):
     menuType: str
     baggageWeight: int
 
+# Модель для билета
 class Ticket(BaseModel):
     ticketId: str
     flightId: str
@@ -33,7 +36,7 @@ class Ticket(BaseModel):
     menuType: str
     baggageWeight: int
     status: str = "active"
-    createdAt: str = None  # Делаем необязательным с None по умолчанию
+    createdAt: str = None
     gate: Optional[str] = None
     seatNumber: Optional[str] = None
     flightDepartureTime: Optional[str] = None
@@ -43,6 +46,7 @@ class Ticket(BaseModel):
     class Config:
         json_encoders = {"datetime": lambda v: v.isoformat()}
 
+# In-memory база билетов и счётчик билетов на рейс
 tickets_db = {}
 flight_ticket_count = {}
 
@@ -149,5 +153,41 @@ def refund_ticket(ticketId: str, passengerId: str):
     print("---------------------\n")
     return ticket
 
+@app.post("/v1/tickets/send-to-checkin/{flightId}", response_model=dict)
+def send_tickets_to_checkin(flightId: str):
+    logger.info(f"Попытка отправить билеты для рейса {flightId} в Check-In")
+    try:
+        response = requests.get(f"{TABLO_API_URL}/{flightId}")
+        response.raise_for_status()
+        flight_data = response.json()
+        logger.info(f"Статус рейса {flightId} получен: {flight_data.get('status')}")
+        if flight_data["status"] != "RegistrationOpen":
+            logger.error(f"Регистрация на рейс {flightId} ещё не открыта (статус: {flight_data['status']})")
+            raise HTTPException(status_code=400, detail="Регистрация на рейс ещё не открыта")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при проверке рейса {flightId}: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка при проверке рейса")
+
+    # Собираем активные билеты для рейса
+    active_tickets = [ticket.dict() for ticket in tickets_db.values()
+                      if ticket.flightId == flightId and ticket.status == "active"]
+    logger.info(f"Активные билеты для рейса {flightId}: {active_tickets}")
+    if not active_tickets:
+        logger.info(f"Нет активных билетов для рейса {flightId}")
+        return {"status": "success", "message": "Нет активных билетов для отправки"}
+
+    # Отправляем билеты в Check-In
+    try:
+        checkin_response = requests.post(
+            f"{CHECKIN_API_URL}/tickets",
+            json={"flightId": flightId, "tickets": active_tickets}
+        )
+        checkin_response.raise_for_status()
+        logger.info(f"Билеты для рейса {flightId} успешно отправлены в Check-In")
+        return {"status": "success", "message": f"Отправлено {len(active_tickets)} билетов для рейса {flightId}"}
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при отправке билетов в Check-In для рейса {flightId}: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка при отправке билетов в Check-In")
+
 if __name__ == "__main__":
-    uvicorn.run("tickets_api:app", host="172.20.10.2", port=8005, reload=True)  # Хост для кассы
+    uvicorn.run("tickets_api:app", host="172.20.10.2", port=8005, reload=True)

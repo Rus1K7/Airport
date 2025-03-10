@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body  # Добавлен импорт Body
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
@@ -14,9 +14,10 @@ from tabulate import tabulate
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("PassengersAPI")
 
-# URL модуля "Табло" и "Кассы" с новыми IP-адресами
-TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло на 192.168.32.3:8003
-TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets/buy"  # Касса на 192.168.32.5:8005
+# URL модулей
+TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"      # Табло
+TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets/buy" # Касса
+CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"     # Check-In
 
 # Модель данных для билета (согласована с tickets_api.py)
 class Ticket(BaseModel):
@@ -46,7 +47,7 @@ class Passenger(BaseModel):
     baggageWeight: int
     menuType: str
     ticket: Optional[Ticket] = None
-    state: str = "CameToAirport"
+    state: str = "CameToAirport"  # Возможные состояния: CameToAirport, GotTicket, CheckedIn, ReadyForBus, OnBus, Boarded
     isVIP: bool
 
     class Config:
@@ -162,6 +163,24 @@ def generate_passenger():
         passenger.ticket = Ticket(**ticket_data)
         passenger.state = "GotTicket"
         logger.info(f"Пассажир {name} купил билет {ticket_data['ticketId']}")
+
+        # Попытка автоматической регистрации (опционально)
+        if flight_data["status"] in ["RegistrationOpen", "RegistrationClosed"]:
+            try:
+                checkin_response = requests.post(
+                    f"{CHECKIN_API_URL}/start",
+                    json={
+                        "flightId": flightId,
+                        "passengerId": passenger_id,
+                        "ticketId": ticket_data["ticketId"]
+                    }
+                )
+                checkin_response.raise_for_status()
+                checkin_data = checkin_response.json()
+                passenger.state = "CheckedIn"
+                logger.info(f"Пассажир {name} успешно зарегистрирован, checkInId: {checkin_data['checkInId']}")
+            except requests.RequestException as e:
+                logger.error(f"Ошибка при регистрации пассажира {name}: {e}")
     except requests.RequestException as e:
         logger.error(f"Ошибка при покупке билета для {name}: {e}")
 
@@ -245,6 +264,28 @@ def create_passenger(
         state="CameToAirport",
         isVIP=isVIP
     )
+
+    # Покупка билета
+    try:
+        ticket_response = requests.post(
+            TICKETS_API_URL,
+            json={
+                "passengerId": passenger_id,
+                "passengerName": name,
+                "flightId": flightId,
+                "isVIP": isVIP,
+                "menuType": menuType,
+                "baggageWeight": baggageWeight
+            }
+        )
+        ticket_response.raise_for_status()
+        ticket_data = ticket_response.json()
+        passenger.ticket = Ticket(**ticket_data)
+        passenger.state = "GotTicket"
+        logger.info(f"Пассажир {name} купил билет {ticket_data['ticketId']}")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при покупке билета для {name}: {e}")
+
     passengers_db[passenger_id] = passenger
     logger.info(f"Пассажир {name} (ID: {passenger_id}) успешно создан с рейсом {flightId}")
     print(f"\n--- Новый пассажир ---")
@@ -255,19 +296,25 @@ def create_passenger(
     print(f"Тип питания: {menuType}")
     print(f"Статус: {passenger.state}")
     print(f"VIP: {isVIP}")
+    print(f"Билет: {passenger.ticket.ticketId if passenger.ticket else 'Нет'}")
     print("---------------------\n")
     return passenger
 
+# Получение всех пассажиров
 @app.get("/v1/passengers", response_model=List[Passenger])
 def get_all_passengers():
     passengers = list(passengers_db.values())
     logger.info(f"Запрошен список всех пассажиров: {len(passengers)} записей")
     return passengers
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# получение всех пассажиров по конкретному рейсу
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# Получение всех пассажиров по рейсу
+@app.get("/v1/passengers/flight/{flightId}", response_model=List[Passenger])
+def get_passengers_by_flight(flightId: str):
+    passengers = [p for p in passengers_db.values() if p.flightId == flightId]
+    logger.info(f"Запрошены пассажиры рейса {flightId}: найдено {len(passengers)}")
+    return passengers
 
+# Получение пассажира по ID
 @app.get("/v1/passengers/{passengerId}", response_model=Passenger)
 def get_passenger(passengerId: str):
     passenger = passengers_db.get(passengerId)
@@ -286,5 +333,50 @@ def get_passenger(passengerId: str):
     print("---------------------\n")
     return passenger
 
+# Эндпоинт для регистрации пассажира
+@app.post("/v1/passengers/{passengerId}/checkin", response_model=Passenger)
+def checkin_passenger(passengerId: str):
+    passenger = passengers_db.get(passengerId)
+    if not passenger:
+        raise HTTPException(status_code=404, detail="Пассажир не найден")
+    if passenger.state != "GotTicket":
+        raise HTTPException(status_code=400, detail="Пассажир не может зарегистрироваться (нет билета или уже зарегистрирован)")
+
+    try:
+        checkin_response = requests.post(
+            f"{CHECKIN_API_URL}/start",
+            json={
+                "flightId": passenger.flightId,
+                "passengerId": passenger.id,
+                "ticketId": passenger.ticket.ticketId
+            }
+        )
+        checkin_response.raise_for_status()
+        checkin_data = checkin_response.json()
+        passenger.state = "CheckedIn"
+        logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
+
+        # После успешной регистрации пассажир готов к автобусу
+        passenger.state = "ReadyForBus"
+        logger.info(f"Пассажир {passenger.name} готов к посадке в автобус")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при регистрации пассажира {passenger.name}: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка при регистрации")
+
+    return passenger
+
+# Эндпоинт для обновления состояния
+@app.patch("/v1/passengers/{passengerId}/state", response_model=Passenger)
+def update_passenger_state(passengerId: str, state: str = Body(..., embed=True)):
+    passenger = passengers_db.get(passengerId)
+    if not passenger:
+        raise HTTPException(status_code=404, detail="Пассажир не найден")
+    valid_states = ["CameToAirport", "GotTicket", "CheckedIn", "ReadyForBus", "OnBus", "Boarded"]
+    if state not in valid_states:
+        raise HTTPException(status_code=400, detail="Неверное состояние")
+    passenger.state = state
+    logger.info(f"Состояние пассажира {passenger.name} обновлено на {state}")
+    return passenger
+
 if __name__ == "__main__":
-    uvicorn.run("passengers_api:app", host="172.20.10.2", port=8004, reload=True)  # Хост для пассажиров
+    uvicorn.run("passengers_api:app", host="172.20.10.2", port=8004, reload=True)
