@@ -14,7 +14,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("TicketsAPI")
 
 # URL модулей
-TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло
+TABLO_API_URL = "http://localhost:8003/v1/flights"  # Табло
+
+# TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло
 CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"  # Check-In
 MAX_TICKETS_PER_FLIGHT = 100
 
@@ -177,14 +179,19 @@ def refund_ticket(ticketId: str, passengerId: str):
     if not ticket:
         logger.error(f"Билет с ID {ticketId} не найден")
         raise HTTPException(status_code=404, detail="Билет не найден")
+
     if ticket.passengerId != passengerId:
         logger.error(f"Пассажир {passengerId} не владеет билетом {ticketId}")
         raise HTTPException(status_code=400, detail="Этот билет принадлежит другому пассажиру")
+
     if ticket.status == "returned":
         logger.error(f"Билет {ticketId} уже возвращён")
         raise HTTPException(status_code=409, detail="Билет уже возвращён")
+
+    # Обновляем статус билета
     ticket.status = "returned"
     flight_ticket_count[ticket.flightId] = flight_ticket_count.get(ticket.flightId, 0) - 1
+
     logger.info(f"Билет {ticketId} возвращён для пассажира {ticket.passengerName}")
     print(f"\n--- Возврат билета ---")
     print(f"ID билета: {ticketId}")
@@ -192,7 +199,10 @@ def refund_ticket(ticketId: str, passengerId: str):
     print(f"Рейс: {ticket.flightId}")
     print(f"Статус: {ticket.status}")
     print("---------------------\n")
+
     return ticket
+
+
 
 @app.post("/v1/tickets/send-to-checkin/{flightId}", response_model=dict)
 def send_tickets_to_checkin(flightId: str):
@@ -227,6 +237,17 @@ def send_tickets_to_checkin(flightId: str):
     except requests.RequestException as e:
         logger.error(f"Ошибка при отправке билетов в Check-In для рейса {flightId}: {e}")
         raise HTTPException(status_code=503, detail="Ошибка при отправке билетов в Check-In")
+
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi import Request
+
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/ui/tickets", response_class=HTMLResponse)
+async def ui_tickets(request: Request):
+    return templates.TemplateResponse("tickets.html", {"request": request})
+
 
 if __name__ == "__main__":
     uvicorn.run("tickets_api:app", host="172.20.10.2", port=8005, reload=True)

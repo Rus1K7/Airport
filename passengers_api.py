@@ -15,14 +15,17 @@ from tabulate import tabulate
 # Настройка шаблонов
 templates = Jinja2Templates(directory="templates")
 
-# Настройка логгера с уровнем DEBUG для диагностики
+# Настройка логгера с уровнем DEBUG
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("PassengersAPI")
 
+#### !!!!!!!!!!!!!!!!!!!!!!!!!! Ctrl+F проверятть все IP
 # URL модулей
-TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло
-TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets/buy"  # Касса
-CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"  # Check-In
+TABLO_API_URL = "http://localhost:8003/v1/flights"  # Табло
+
+# TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"
+TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets/buy"
+CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"
 
 
 # Модель данных для билета
@@ -54,15 +57,16 @@ class Passenger(BaseModel):
     baggageWeight: int
     menuType: str
     ticket: Optional[Ticket] = None
-    state: str = "CameToAirport"  # Возможные состояния: CameToAirport, GotTicket, CheckedIn, ReadyForBus, OnBus, Boarded
+    state: str = "CameToAirport"  # Возможные состояния
     isVIP: bool
 
     class Config:
         json_encoders = {"datetime": lambda v: v.isoformat()}
 
 
-# База данных пассажиров (in-memory)
+# База данных пассажиров и подделанных билетов
 passengers_db = {}
+faked_tickets = set()
 
 # Константы
 MENU_TYPES = ["meat", "chicken", "fish", "vegan"]
@@ -70,14 +74,13 @@ NAMES = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry"]
 VALID_STATES = ["CameToAirport", "GotTicket", "CheckedIn", "ReadyForBus", "OnBus", "Boarded"]
 
 
-# Функция для получения доступных рейсов с Табло
+# Функция для получения доступных рейсов
 def get_available_flights() -> List[dict]:
     try:
         response = requests.get(TABLO_API_URL)
         response.raise_for_status()
         flights = response.json()
-        available = [f for f in flights if
-                     f["status"] in ["Scheduled"]]
+        available = [f for f in flights if f["status"] in ["Scheduled"]]
         logger.debug(f"Получено {len(available)} доступных рейсов с Табло")
         return available
     except requests.RequestException as e:
@@ -106,22 +109,29 @@ def print_passengers_table():
         print("\n--- Таблица пассажиров ---\nНет пассажиров\n-------------------------")
         return
 
-    table_data = []
-    for p in passengers:
-        flight_time = p.ticket.flightDepartureTime if p.ticket and p.ticket.flightDepartureTime else "N/A"
-        if flight_time != "N/A":
-            flight_time = flight_time.split("T")[1][:5]  # Например, "09:00"
-        table_data.append([flight_time, p.flightId, p.id, p.name, p.state, p.baggageWeight, p.menuType, str(p.isVIP),
-                           p.ticket.ticketId if p.ticket else "Нет"])
-
+    table_data = [
+        [
+            p.ticket.flightDepartureTime.split("T")[1][:5] if p.ticket and p.ticket.flightDepartureTime else "N/A",
+            p.flightId,
+            p.id,
+            p.name,
+            p.state,
+            p.baggageWeight,
+            p.menuType,
+            str(p.isVIP),
+            p.ticket.ticketId if p.ticket else "Нет"
+        ]
+        for p in passengers
+    ]
     table_data.sort(key=lambda x: (x[0] if x[0] != "N/A" else "ZZ:ZZ", x[1]))
     headers = ["Время", "Рейс", "ID", "Имя", "Статус", "Вес багажа", "Тип питания", "VIP", "Билет"]
     logger.info("Вывод таблицы пассажиров")
     print(
         f"\n--- Таблица пассажиров ---\n{tabulate(table_data, headers=headers, tablefmt='grid')}\n-------------------------")
 
+    # Функция создания пассажира
 
-# Функция создания пассажира (общая для автоматической и ручной генерации)
+
 def create_passenger_instance(name: str, flightId: str, baggageWeight: int, menuType: str, isVIP: bool) -> Passenger:
     passenger_id = str(uuid.uuid4())
     flight_data = check_flight(flightId)
@@ -145,12 +155,14 @@ def create_passenger_instance(name: str, flightId: str, baggageWeight: int, menu
         logger.info(f"Пассажир {name} купил билет {ticket_data['ticketId']}")
     except requests.RequestException as e:
         logger.error(f"Ошибка при покупке билета для {name}: {e}")
-        return passenger  # Возвращаем без билета, чтобы не потерять пассажира
+        if e.response and e.response.status_code == 409:
+            raise HTTPException(status_code=409, detail=f"Конфликт при покупке билета: {e.response.text}")
+        return passenger  # Возвращаем без билета
 
     # Автоматическая регистрация
     if flight_data["status"] in ["RegistrationOpen", "RegistrationClosed"]:
         try:
-            logger.debug(f"Отправка POST-запроса на регистрацию: {flightId}, {passenger_id}, {ticket_data['ticketId']}")
+            logger.debug(f"Регистрация: {flightId}, {passenger_id}, {ticket_data['ticketId']}")
             checkin_response = requests.post(f"{CHECKIN_API_URL}/start", json={
                 "flightId": flightId, "passengerId": passenger_id, "ticketId": ticket_data["ticketId"]
             })
@@ -163,8 +175,6 @@ def create_passenger_instance(name: str, flightId: str, baggageWeight: int, menu
 
     passengers_db[passenger_id] = passenger
     logger.info(f"Пассажир {name} (ID: {passenger_id}) создан с рейсом {flightId}")
-    print(
-        f"\n--- Новый пассажир ---\nID: {passenger_id}\nИмя: {name}\nРейс: {flightId}\nВес багажа: {baggageWeight}\nТип питания: {menuType}\nСтатус: {passenger.state}\nVIP: {isVIP}\nБилет: {passenger.ticket.ticketId if passenger.ticket else 'Нет'}\n---------------------")
     return passenger
 
 
@@ -185,13 +195,13 @@ def generate_passenger():
 
 # Автоматическая регистрация пассажиров
 def auto_checkin_passengers():
-    logger.debug(f"Запуск автоматической регистрации, пассажиров в базе: {len(passengers_db)}")
+    logger.debug(f"Запуск автоматической регистрации, пассажиров: {len(passengers_db)}")
     for passenger in passengers_db.values():
         if passenger.state == "GotTicket":
             try:
                 flight_data = check_flight(passenger.flightId)
                 if flight_data["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
-                    logger.debug(f"Регистрация для {passenger.name} невозможна, статус рейса: {flight_data['status']}")
+                    logger.debug(f"Регистрация для {passenger.name} невозможна, статус: {flight_data['status']}")
                     continue
                 logger.debug(
                     f"Регистрация {passenger.name}: {passenger.flightId}, {passenger.id}, {passenger.ticket.ticketId}")
@@ -210,7 +220,7 @@ def auto_checkin_passengers():
 scheduler = BackgroundScheduler()
 scheduler.add_job(generate_passenger, 'interval', seconds=2)
 scheduler.add_job(print_passengers_table, 'interval', seconds=60)
-scheduler.add_job(auto_checkin_passengers, 'interval', seconds=10)
+scheduler.add_job(auto_checkin_passengers, 'interval', seconds=2)
 
 
 # Запуск приложения
@@ -226,7 +236,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Passengers Module", lifespan=lifespan)
 
 
-# Создание пассажира вручную
+# Создание пассажира вручную через API
 @app.post("/v1/passengers", response_model=Passenger, status_code=201)
 def create_passenger(name: Optional[str] = None, flightId: Optional[str] = None, baggageWeight: Optional[int] = 0,
                      menuType: Optional[str] = None, isVIP: Optional[bool] = False):
@@ -272,9 +282,7 @@ def get_passenger(passengerId: str):
 @app.post("/v1/passengers/{passengerId}/checkin", response_model=Passenger)
 def checkin_passenger(passengerId: str):
     passenger = passengers_db.get(passengerId)
-    if not passenger:
-        raise HTTPException(status_code=404, detail="Пассажир не найден")
-    if passenger.state != "GotTicket":
+    if not passenger or passenger.state != "GotTicket":
         raise HTTPException(status_code=400, detail="Пассажир не может зарегистрироваться")
     try:
         logger.debug(f"Регистрация {passenger.name}: {passenger.flightId}, {passenger.id}, {passenger.ticket.ticketId}")
@@ -306,28 +314,136 @@ def update_passenger_state(passengerId: str, state: str = Body(..., embed=True))
     return passenger
 
 
+def get_reg_flights() -> List[dict]:
+    try:
+        response = requests.get(TABLO_API_URL)
+        response.raise_for_status()
+        flights = response.json()
+        # Возвращаем рейсы с регистрацией (RegistrationOpen или RegistrationClosed)
+        reg_flights = [f for f in flights if f["status"] in ["RegistrationOpen", "RegistrationClosed"]]
+        logger.debug(f"Получено {len(reg_flights)} рейсов для регистрации")
+        return reg_flights
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при запросе рейсов для регистрации: {e}")
+        return []
 
-# UI: Установка VIP-статуса
-@app.post("/ui/set_vip", response_class=RedirectResponse)
-async def ui_set_vip(passenger_id: str = Form(...)):
-    passenger = passengers_db.get(passenger_id)
-    if not passenger:
-        raise HTTPException(status_code=404, detail="Пассажир не найден")
-    passenger.isVIP = True
-    logger.info(f"У пассажира {passenger.name} (ID: {passenger.id}) установлен VIP-статус")
+
+def update_passenger_ticket(passenger):
+    try:
+        response = requests.get(f"http://172.20.10.2:8005/v1/tickets/passenger/{passenger.id}")
+        response.raise_for_status()
+        tickets = response.json()
+        # Фильтруем только активные билеты
+        active_tickets = [t for t in tickets if t["status"] == "active"]
+        if active_tickets:
+            passenger.ticket = active_tickets[0]
+        else:
+            passenger.ticket = None
+    except Exception as e:
+        logger.error(f"Ошибка обновления билета для пассажира {passenger.id}: {e}")
+
+
+# UI: Главная страница
+@app.get("/ui", response_class=HTMLResponse)
+async def ui_home(request: Request):
+    available_flights = get_available_flights()  # Только рейсы со статусом "Scheduled"
+    reg_flights = get_reg_flights()  # Рейсы, где регистрация открыта или закрыта
+    passengers = list(passengers_db.values())
+
+    # Обновляем информацию о билетах для каждого пассажира
+    for p in passengers:
+        update_passenger_ticket(p)
+
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "passengers": passengers,
+            "faked_tickets": faked_tickets,
+            "available_flights": available_flights,
+            "reg_flights": reg_flights,
+            "flights": available_flights  # Для массового создания используем доступные рейсы
+        }
+    )
+
+
+# UI: Создание пассажира
+@app.post("/ui/create_passenger", response_class=RedirectResponse)
+async def ui_create_passenger(request: Request, name: str = Form(...), flightId: str = Form(...),
+                              baggageWeight: int = Form(...), menuType: str = Form(...),
+                              isVIP: Optional[bool] = Form(False)):
+    try:
+        passenger = create_passenger_instance(name, flightId, baggageWeight, menuType, isVIP)
+        logger.info(f"Пассажир {name} создан через UI, ID: {passenger.id}")
+    except HTTPException as e:
+        logger.error(f"Ошибка при создании пассажира через UI: {e.detail}")
+        return templates.TemplateResponse("index.html", {"request": request, "passengers": list(passengers_db.values()),
+                                                         "error": e.detail})
     return RedirectResponse(url="/ui", status_code=303)
 
+# UI: Массовое создание пассажиров
+@app.post("/ui/create_bulk_passengers", response_class=RedirectResponse)
+async def ui_create_bulk_passengers(request: Request, bulk_count: int = Form(...), bulk_flightId: str = Form(...)):
+    created_ids = []
+    for i in range(bulk_count):
+        name = random.choice(NAMES)
+        baggageWeight = random.randint(0, 20)
+        menuType = random.choice(MENU_TYPES)
+        isVIP = random.random() < 0.2
+        try:
+            passenger = create_passenger_instance(name, bulk_flightId, baggageWeight, menuType, isVIP)
+            created_ids.append(passenger.id)
+        except HTTPException as e:
+            logger.error(f"Ошибка при создании пассажира {name}: {e.detail}")
+            # Продолжаем создавать остальных даже если один не удался.
+            continue
+    logger.info(f"Создано пассажиров: {len(created_ids)}")
+    return RedirectResponse(url="/ui", status_code=303)
+
+# UI: Массовая регистрация всех пассажиров рейса
+@app.post("/ui/register_all", response_class=RedirectResponse)
+async def ui_register_all(request: Request, flightId: str = Form(...)):
+    # Проверяем статус рейса (регистрация возможна, если статус RegistrationOpen или RegistrationClosed)
+    flight_data = check_flight(flightId)
+    if flight_data["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Регистрация для рейса {flightId} невозможна, статус: {flight_data['status']}"
+        )
+
+    count_registered = 0
+    for passenger in passengers_db.values():
+        if passenger.flightId == flightId and passenger.state == "GotTicket" and passenger.ticket:
+            try:
+                checkin_response = requests.post(f"{CHECKIN_API_URL}/start", json={
+                    "flightId": passenger.flightId,
+                    "passengerId": passenger.id,
+                    "ticketId": passenger.ticket.ticketId
+                })
+                checkin_response.raise_for_status()
+                checkin_data = checkin_response.json()
+                passenger.state = "CheckedIn"
+                logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
+                # После успешной регистрации обновляем состояние, например, на ReadyForBus
+                passenger.state = "ReadyForBus"
+                count_registered += 1
+            except requests.RequestException as e:
+                logger.error(f"Ошибка регистрации пассажира {passenger.name}: {e}")
+                continue
+
+    logger.info(f"Зарегистрировано пассажиров: {count_registered} для рейса {flightId}")
+    return RedirectResponse(url="/ui", status_code=303)
+
+# UI: Установка/переключение VIP-статуса
 @app.post("/ui/toggle_vip", response_class=RedirectResponse)
-async def ui_toggle_vip(request: Request, passenger_id: str = Form(...)):
+async def ui_toggle_vip(passenger_id: str = Form(...)):
     passenger = passengers_db.get(passenger_id)
     if not passenger:
         raise HTTPException(status_code=404, detail="Пассажир не найден")
-    old_status = passenger.isVIP
-    passenger.isVIP = not old_status
-    logger.info(f"Пассажиру {passenger.name} (ID: {passenger.id}) VIP статус изменён с {old_status} на {passenger.isVIP}")
+    passenger.isVIP = not passenger.isVIP
+    logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) VIP статус изменён на {passenger.isVIP}")
     return RedirectResponse(url="/ui", status_code=303)
 
-faked_tickets = set()
 
 # UI: Подделка билета
 @app.post("/ui/fake_ticket", response_class=RedirectResponse)
@@ -335,64 +451,17 @@ async def ui_fake_ticket(passenger_id: str = Form(...)):
     passenger = passengers_db.get(passenger_id)
     if not passenger or not passenger.ticket:
         raise HTTPException(status_code=400, detail="Пассажир не найден или нет билета")
-
-    # Сначала проверяем статус рейса пассажира
-    flight_data = check_flight(passenger.flightId)  # Используем вашу функцию check_flight
+    flight_data = check_flight(passenger.flightId)
     if flight_data["status"] != "Scheduled":
-        # Если статус не Scheduled, возвращаем ошибку
-        raise HTTPException(
-            status_code=400,
-            detail=f"Подделать билет невозможно, так как рейс '{passenger.flightId}' имеет статус: {flight_data['status']}"
-        )
+        raise HTTPException(status_code=400, detail=f"Подделка невозможна, статус рейса: {flight_data['status']}")
 
-    # Старый билет
     old_ticket = passenger.ticket.ticketId
-
-    # Создаем новый ticketId (подделка)
     new_ticket_data = passenger.ticket.dict()
     new_ticket_data["ticketId"] = str(uuid.uuid4())
     passenger.ticket = Ticket(**new_ticket_data)
-
-    logger.info(
-        f"Билет пассажира {passenger.name} (ID: {passenger.id}) изменён "
-        f"с {old_ticket} на {new_ticket_data['ticketId']}"
-    )
-
-    # Помечаем в наборе, что у этого пассажира билет «подделан»
     faked_tickets.add(passenger_id)
-
+    logger.info(f"Билет пассажира {passenger.name} изменён с {old_ticket} на {new_ticket_data['ticketId']}")
     return RedirectResponse(url="/ui", status_code=303)
-
-
-
-
-@app.post("/ui/create_passenger", response_class=RedirectResponse)
-async def ui_create_passenger(
-    request: Request,
-    name: str = Form(...),
-    flightId: str = Form(...),
-    baggageWeight: int = Form(...),
-    menuType: str = Form(...),
-    isVIP: Optional[bool] = Form(False)
-):
-    passenger = create_passenger_instance(name, flightId, baggageWeight, menuType, isVIP)
-    logger.info(f"Пассажир {name} создан вручную через UI, ID: {passenger.id}")
-    return RedirectResponse(url="/ui", status_code=303)
-
-#########################
-# UI главной страницы
-#########################
-@app.get("/ui", response_class=HTMLResponse)
-async def ui_home(request: Request):
-    # Передаем список пассажиров и наш набор подделанных билетов
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "passengers": list(passengers_db.values()),
-            "faked_tickets": faked_tickets
-        }
-    )
 
 
 if __name__ == "__main__":

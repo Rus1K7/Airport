@@ -167,6 +167,19 @@ def set_simulation_speed_endpoint(speed: int = Body(...)):
     set_simulation_speed(speed)
     return {"message": f"Simulation speed set to {speed}x"}
 
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi import Request
+
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/ui/tablo", response_class=HTMLResponse)
+async def ui_tablo(request: Request):
+    flights = list(flights_db.values())  # Получаем все рейсы
+    return templates.TemplateResponse(
+        "tablo.html",
+        {"request": request, "flights": flights}
+    )
 
 if __name__ == "__main__":
-    uvicorn.run("flights_api:app", host="172.20.10.2", port=8003, reload=True)  # Исправил хост на ваш предыдущий
+    uvicorn.run("flights_api:app", host="localhost", port=8003, reload=True)  # Исправил хост на ваш предыдущий

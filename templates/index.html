@@ -1,138 +1,225 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>UI модуля пассажиров</title>
-    <script>
-        function sortTableByColumn(tableId, columnIndex) {
-            const table = document.getElementById(tableId);
-            if (!table) return;
-            let rows = Array.from(table.querySelectorAll('tbody tr'));
-            let currentDirection = table.getAttribute('data-sort-direction') || 'asc';
-            let newDirection = (currentDirection === 'asc') ? 'desc' : 'asc';
-            table.setAttribute('data-sort-direction', newDirection);
-
-            rows.sort((rowA, rowB) => {
-                let cellA = rowA.querySelectorAll('td')[columnIndex].innerText;
-                let cellB = rowB.querySelectorAll('td')[columnIndex].innerText;
-                if (newDirection === 'asc') {
-                    return cellA.localeCompare(cellB);
-                } else {
-                    return cellB.localeCompare(cellA);
-                }
-            });
-
-            let tbody = table.querySelector('tbody');
-            rows.forEach(row => tbody.appendChild(row));
-        }
-    </script>
-    <style>
-        .container {
-            display: flex;
-        }
-        .left {
-            flex: 1;
-        }
-        .right {
-            flex: 1;
-            margin-left: 20px;
-        }
-
-        /* Фон для подделанных билетов */
-        .faked {
-            background-color: #ffcccc; /* светло-красный, например */
-        }
-    </style>
+  <meta charset="utf-8">
+  <title>UI модуля пассажиров</title>
+  <!-- Подключение Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script>
+    function sortTableByColumn(tableId, columnIndex) {
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      let rows = Array.from(table.querySelectorAll('tbody tr'));
+      let currentDirection = table.getAttribute('data-sort-direction') || 'asc';
+      let newDirection = (currentDirection === 'asc') ? 'desc' : 'asc';
+      table.setAttribute('data-sort-direction', newDirection);
+      rows.sort((rowA, rowB) => {
+        let cellA = rowA.querySelectorAll('td')[columnIndex].innerText;
+        let cellB = rowB.querySelectorAll('td')[columnIndex].innerText;
+        return (newDirection === 'asc')
+          ? cellA.localeCompare(cellB)
+          : cellB.localeCompare(cellA);
+      });
+      let tbody = table.querySelector('tbody');
+      rows.forEach(row => tbody.appendChild(row));
+    }
+  </script>
+  <style>
+    body {
+      background: #f8f9fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    h1, h2 {
+      margin-bottom: 20px;
+    }
+    .container-custom {
+      margin-top: 30px;
+    }
+    .card {
+      margin-bottom: 20px;
+    }
+    /* Подсветка для подделанных билетов */
+    .faked {
+      background-color: #ffcccc !important;
+    }
+    .table-container {
+      overflow-x: auto;
+    }
+  </style>
 </head>
 <body>
-    <h1>Список пассажиров</h1>
-    <div class="container">
-        <!-- Левая часть: таблица -->
-        <div class="left">
-            <table id="passengers-table" border="1" cellspacing="0" cellpadding="5" data-sort-direction="asc">
-                <thead>
-                    <tr>
-                        <th onclick="sortTableByColumn('passengers-table', 0)">Время</th>
-                        <th onclick="sortTableByColumn('passengers-table', 1)">Рейс</th>
-                        <th>ID</th>
-                        <th>Имя</th>
-                        <th>Статус</th>
-                        <th>Вес багажа</th>
-                        <th>Тип питания</th>
-                        <th>VIP</th>
-                        <th>Билет</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for p in passengers %}
-                <!-- Проверяем, есть ли ID в наборе faked_tickets -->
-                <tr {% if p.id in faked_tickets %}class="faked"{% endif %}>
-                    <td>
-                      {% if p.ticket and p.ticket.flightDepartureTime %}
-                        {{ p.ticket.flightDepartureTime.split("T")[1][:5] }}
-                      {% else %}
-                        N/A
-                      {% endif %}
-                    </td>
-                    <td>{{ p.flightId }}</td>
-                    <td>{{ p.id }}</td>
-                    <td>{{ p.name }}</td>
-                    <td>{{ p.state }}</td>
-                    <td>{{ p.baggageWeight }}</td>
-                    <td>{{ p.menuType }}</td>
-                    <td>{{ p.isVIP }}</td>
-                    <td>
-                        {% if p.ticket %}
-                            {{ p.ticket.ticketId }}
-                            {% if p.id in faked_tickets %}
-                              <strong>(Подделан)</strong>
-                            {% endif %}
-                        {% else %}
-                            Нет
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
+  <!-- Верхняя панель с игровым временем удалена -->
 
-        <!-- Правая часть: формы -->
-        <div class="right">
-            <h2>Переключить VIP-статус</h2>
+  <div class="container container-custom">
+    <h1 class="text-center mb-4">Список пассажиров</h1>
+    <div class="row">
+      <!-- Левая колонка: таблица -->
+      <div class="col-md-7 table-container">
+        <table id="passengers-table" class="table table-striped table-hover" data-sort-direction="asc">
+          <thead class="table-dark">
+            <tr>
+              <th style="cursor: pointer;" onclick="sortTableByColumn('passengers-table', 0)">Время</th>
+              <th style="cursor: pointer;" onclick="sortTableByColumn('passengers-table', 1)">Рейс</th>
+              <th>ID</th>
+              <th>Имя</th>
+              <th>Статус</th>
+              <th>Вес багажа</th>
+              <th>Тип питания</th>
+              <th>VIP</th>
+              <th>Билет</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in passengers %}
+            <tr {% if p.id in faked_tickets %}class="faked"{% endif %}>
+              <td>
+                {% if p.ticket and p.ticket.flightDepartureTime %}
+                  {{ p.ticket.flightDepartureTime.split("T")[1][:5] }}
+                {% else %}
+                  N/A
+                {% endif %}
+              </td>
+              <td>{{ p.flightId }}</td>
+              <td>{{ p.id }}</td>
+              <td>{{ p.name }}</td>
+              <td>{{ p.state }}</td>
+              <td>{{ p.baggageWeight }}</td>
+              <td>{{ p.menuType }}</td>
+              <td>{{ p.isVIP }}</td>
+              <td>
+                {% if p.ticket %}
+                  {{ p.ticket.ticketId }}
+                  {% if p.id in faked_tickets %}
+                    <span class="badge bg-danger">Подделан</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">Нет</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Правая колонка: формы управления -->
+      <div class="col-md-5">
+        <!-- Форма переключения VIP -->
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title h5">Переключить VIP-статус</h2>
             <form action="/ui/toggle_vip" method="post">
-                <label for="passenger_id_vip">Введите ID пассажира:</label><br>
-                <input type="text" name="passenger_id" id="passenger_id_vip" required><br>
-                <button type="submit">Переключить VIP</button>
+              <div class="mb-3">
+                <label for="passenger_id_vip" class="form-label">Введите ID пассажира:</label>
+                <input type="text" name="passenger_id" id="passenger_id_vip" class="form-control" required>
+              </div>
+              <button type="submit" class="btn btn-primary">Переключить VIP</button>
             </form>
-
-            <h2>Подделать билет</h2>
-            <form action="/ui/fake_ticket" method="post">
-                <label for="passenger_id_ticket">Введите ID пассажира:</label><br>
-                <input type="text" name="passenger_id" id="passenger_id_ticket" required><br>
-                <button type="submit">Подделать билет</button>
-            </form>
-
-            <h2>Создать нового пассажира вручную</h2>
-            <form action="/ui/create_passenger" method="post">
-                <label for="name">Имя:</label><br>
-                <input type="text" name="name" id="name" required><br>
-                <label for="flightId">Рейс:</label><br>
-                <input type="text" name="flightId" id="flightId" required><br>
-                <label for="baggageWeight">Вес багажа:</label><br>
-                <input type="number" name="baggageWeight" id="baggageWeight" required><br>
-                <label for="menuType">Тип питания:</label><br>
-                <select name="menuType" id="menuType">
-                    <option value="meat">meat</option>
-                    <option value="chicken">chicken</option>
-                    <option value="fish">fish</option>
-                    <option value="vegan">vegan</option>
-                </select><br>
-                <label for="isVIP">VIP:</label>
-                <input type="checkbox" name="isVIP" id="isVIP"><br>
-                <button type="submit">Создать пассажира</button>
-            </form>
+          </div>
         </div>
+
+        <!-- Форма подделки билета -->
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title h5">Подделать билет</h2>
+            <form action="/ui/fake_ticket" method="post">
+              <div class="mb-3">
+                <label for="passenger_id_ticket" class="form-label">Введите ID пассажира:</label>
+                <input type="text" name="passenger_id" id="passenger_id_ticket" class="form-control" required>
+              </div>
+              <button type="submit" class="btn btn-warning">Подделать билет</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Форма создания одного пассажира -->
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title h5">Создать нового пассажира</h2>
+            <form action="/ui/create_passenger" method="post">
+              <div class="mb-3">
+                <label for="name" class="form-label">Имя:</label>
+                <input type="text" name="name" id="name" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label for="flightId" class="form-label">Рейс:</label>
+                <select name="flightId" id="flightId" class="form-select" required>
+                  {% for flight in available_flights %}
+                  <option value="{{ flight.flightId }}">{{ flight.flightId }} ({{ flight.status }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="baggageWeight" class="form-label">Вес багажа (от 0 до 20):</label>
+                <input type="number" name="baggageWeight" id="baggageWeight" class="form-control" min="0" max="20" required>
+              </div>
+              <div class="mb-3">
+                <label for="menuType" class="form-label">Тип питания:</label>
+                <select name="menuType" id="menuType" class="form-select">
+                  <option value="meat">meat</option>
+                  <option value="chicken">chicken</option>
+                  <option value="fish">fish</option>
+                  <option value="vegan">vegan</option>
+                </select>
+              </div>
+              <div class="form-check mb-3">
+                <input type="checkbox" name="isVIP" id="isVIP" class="form-check-input">
+                <label for="isVIP" class="form-check-label">VIP</label>
+              </div>
+              <button type="submit" class="btn btn-success">Создать пассажира</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Форма массового создания пассажиров -->
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title h5">Создать несколько пассажиров</h2>
+            <form action="/ui/create_bulk_passengers" method="post">
+              <div class="mb-3">
+                <label for="bulk_count" class="form-label">Количество пассажиров:</label>
+                <select name="bulk_count" id="bulk_count" class="form-select" required>
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="bulk_flightId" class="form-label">Рейс:</label>
+                <select name="bulk_flightId" id="bulk_flightId" class="form-select" required>
+                  {% for flight in available_flights %}
+                  <option value="{{ flight.flightId }}">{{ flight.flightId }} ({{ flight.status }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <button type="submit" class="btn btn-info">Создать пассажиров</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Форма массовой регистрации всех пассажиров рейса -->
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title h5">Зарегистрировать всех пассажиров рейса</h2>
+            <form action="/ui/register_all" method="post">
+              <div class="mb-3">
+                <label for="register_flightId" class="form-label">Выберите рейс:</label>
+                <select name="flightId" id="register_flightId" class="form-select" required>
+                  {% for flight in reg_flights %}
+                    <option value="{{ flight.flightId }}">{{ flight.flightId }} ({{ flight.status }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <button type="submit" class="btn btn-secondary">Зарегистрировать всех</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
     </div>
+  </div>
+  <!-- Подключение Bootstrap 5 JS (опционально) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

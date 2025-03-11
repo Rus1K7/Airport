@@ -15,7 +15,10 @@ logger = logging.getLogger("CheckInAPI")
 # URL модулей (укажите корректные адреса)
 PASSENGERS_API_URL = "http://172.20.10.2:8004/v1/passengers"
 TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets"
-FLIGHTS_API_URL = "http://172.20.10.2:8003/v1/flights"
+
+# FLIGHTS_API_URL = "http://172.20.10.2:8003/v1/flights"
+FLIGHTS_API_URL = "http://localhost:8003/v1/flights"  # Табло
+
 BAGGAGE_API_URL = "http://172.20.10.2:8007/v1/baggage"      # Baggage Warehouse
 CATERING_API_URL = "http://172.20.10.2:8008/v1/catering"    # Catering Truck
 
