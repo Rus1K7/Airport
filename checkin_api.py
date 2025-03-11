@@ -90,36 +90,89 @@ app = FastAPI(title="Check-In Module", lifespan=lifespan)
 @app.post("/v1/checkin/tickets", response_model=dict)
 def receive_tickets(request: TicketsRequest = Body(...)):
     flightId = request.flightId
+    # Логируем полученный запрос полностью
+    logger.info(f"Получен запрос на обновление билетов для рейса {flightId}: {request.tickets}")
     tickets_for_checkin[flightId] = request.tickets
-    logger.info(f"Получено {len(request.tickets)} билетов для рейса {flightId} от Ticket Sales")
+    logger.info(f"Обновлен список билетов для рейса {flightId}: {tickets_for_checkin[flightId]}")
     return {"status": "success", "message": f"Получено {len(request.tickets)} билетов для рейса {flightId}"}
+
+# Функция проверки билета и рейса
+def validate_ticket_and_flight(flightId: str, passengerId: str, ticketId: str) -> dict:
+    logger.info(f"Начало проверки рейса {flightId} для пассажира {passengerId} с билетом {ticketId}")
+    try:
+        # Проверка рейса через Information Panel
+        flight_response = requests.get(f"{FLIGHTS_API_URL}/{flightId}")
+        flight_response.raise_for_status()
+        flight = flight_response.json()
+        logger.info(f"Получены данные о рейсе {flightId}: статус {flight.get('status')}")
+        if flight["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
+            logger.error("Регистрация на рейс невозможна, статус рейса: " + flight["status"])
+            raise HTTPException(status_code=400, detail="Регистрация на рейс невозможна")
+        # Проверка билета среди полученных для данного рейса
+        valid_tickets = tickets_for_checkin.get(flightId, [])
+        logger.info(f"Список билетов для рейса {flightId}: {valid_tickets} (количество: {len(valid_tickets)})")
+        ticket = next((t for t in valid_tickets if t["ticketId"] == ticketId), None)
+        if not ticket:
+            logger.error(f"Билет {ticketId} не найден в списке билетов для рейса {flightId}")
+            raise HTTPException(status_code=400, detail="Билет недействителен или подделан")
+        if ticket["passengerId"] != passengerId or ticket["flightId"] != flightId or ticket["status"] != "active":
+            logger.error("Билет не соответствует пассажиру или рейсу")
+            raise HTTPException(status_code=400, detail="Билет не соответствует пассажиру или рейсу")
+        return {"ticket": ticket, "flight": flight}
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при проверке: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка проверки билета или рейса")
+
 
 # Эндпоинт для начала регистрации пассажира
 @app.post("/v1/checkin/start", response_model=dict, status_code=201)
 def start_checkin(request: CheckInRequest = Body(...)):
-    checkin_id = str(uuid4())
-    logger.info(f"Получен запрос на регистрацию: рейс {request.flightId}, пассажир {request.passengerId}, билет {request.ticketId}")
-    # Проверка билета и рейса
-    data = validate_ticket_and_flight(request.flightId, request.passengerId, request.ticketId)
-    ticket = data["ticket"]
-    # Создаем запись Check-In
-    checkin = CheckInData(
-        checkInId=checkin_id,
-        taskType="registration",
-        state="completed",  # Здесь сразу считаем регистрацию завершённой (можно доработать логику)
-        flightId=request.flightId,
-        passengerId=request.passengerId,
-        ticketId=request.ticketId,
-        counter="C1",  # Фиксируем номер стойки регистрации
-        details={
-            "seatNumber": "12A",
-            "mealPreference": ticket["menuType"],
-            "frequentFlyer": ticket["isVIP"]
-        }
-    )
-    checkin_db[checkin_id] = checkin
-    logger.info(f"Пассажир {request.passengerId} зарегистрирован, checkInId: {checkin_id}")
-    return {"checkInId": checkin_id, "status": "Completed"}
+    max_retries = 3
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            checkin_id = str(uuid4())
+            logger.info(
+                f"Получен запрос на регистрацию: рейс {request.flightId}, пассажир {request.passengerId}, билет {request.ticketId}")
+
+            # Попытка проверки билета и рейса
+            data = validate_ticket_and_flight(request.flightId, request.passengerId, request.ticketId)
+            ticket = data["ticket"]
+
+            # Создаем запись Check-In
+            checkin = CheckInData(
+                checkInId=checkin_id,
+                taskType="registration",
+                state="completed",  # Здесь сразу считаем регистрацию завершённой (можно доработать логику)
+                flightId=request.flightId,
+                passengerId=request.passengerId,
+                ticketId=request.ticketId,
+                counter="C1",  # Фиксируем номер стойки регистрации
+                details={
+                    "seatNumber": "12A",
+                    "mealPreference": ticket["menuType"],
+                    "frequentFlyer": ticket["isVIP"]
+                }
+            )
+            checkin_db[checkin_id] = checkin
+            logger.info(f"Пассажир {request.passengerId} успешно зарегистрирован, checkInId: {checkin_id}")
+            return {"checkInId": checkin_id, "status": "Completed"}
+        except HTTPException as exc:
+            # Если ошибка связана с отсутствием билета (код 400), пробуем повторить регистрацию
+            if exc.status_code == 400:
+                attempt += 1
+                logger.error(
+                    f"Ошибка регистрации для пассажира {request.passengerId} (попытка {attempt}/{max_retries}): {exc.detail}")
+                import time
+                time.sleep(2)  # Задержка 2 секунды перед повторной попыткой
+                continue
+            else:
+                # Для других ошибок немедленно выбрасываем исключение
+                raise exc
+    # Если все попытки не увенчались успехом, возвращаем ошибку
+    logger.error(f"Регистрация для пассажира {request.passengerId} не удалась после {max_retries} попыток")
+    raise HTTPException(status_code=400, detail="Регистрация не удалась после нескольких попыток")
+
 
 # Эндпоинт для получения статуса регистрации
 @app.get("/v1/checkin/{checkInId}", response_model=CheckInData)

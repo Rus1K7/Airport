@@ -78,7 +78,7 @@ def update_flight_statuses():
                 flight.status = "Arrived"
             else:
                 # Для прилета можно оставить статус Scheduled (или задать иной, например "EnRoute")
-                flight.status = "Scheduled"
+                flight.status = "PlanningArrive"
 
         # Если статус изменился, отправляем сообщение в RabbitMQ
         if old_status != flight.status:
@@ -169,4 +169,4 @@ def set_simulation_speed_endpoint(speed: int = Body(...)):
 
 
 if __name__ == "__main__":
-    uvicorn.run("flights_api:app", host="localhost", port=8003, reload=True)  # Исправил хост на ваш предыдущий
+    uvicorn.run("flights_api:app", host="172.20.10.2", port=8003, reload=True)  # Исправил хост на ваш предыдущий

@@ -43,7 +43,7 @@ def load_demo_flights():
             toCity="Moscow",
             scheduledTime=datetime(2025, 3, 15, 10, 30),
             arrivalTime=None,
-            status="Scheduled",
+            status="PlanningArrive",
             gate=None,  # Не назначаем гейт, ждём Ground Control
             planeParking=None,  # Не назначаем парковку, ждём Ground Control
             runway="R-2"  # Указываем ВПП для посадки

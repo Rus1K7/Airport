@@ -7,6 +7,7 @@ import requests
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Настройка логгера
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -14,7 +15,7 @@ logger = logging.getLogger("TicketsAPI")
 
 # URL модулей
 TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло
-CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin" # Check-In
+CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"  # Check-In
 MAX_TICKETS_PER_FLIGHT = 100
 
 # Модель для запроса покупки билета
@@ -49,13 +50,15 @@ class Ticket(BaseModel):
 # In-memory база билетов и счётчик билетов на рейс
 tickets_db = {}
 flight_ticket_count = {}
+sent_to_checkin = set()  # Множество рейсов, для которых билеты уже отправлены
 
+# Проверка доступности рейса
 def check_flight_availability(flightId: str) -> dict:
     try:
         response = requests.get(f"{TABLO_API_URL}/{flightId}")
         response.raise_for_status()
         flight_data = response.json()
-        if flight_data["status"] in ["Departed", "Arrived", "Cancelled"]:
+        if flight_data["status"] in ["Departed", "Arrived", "Cancelled", "Boarding", "RegistrationClosed", "RegistrationOpen"]:
             logger.error(f"Рейс {flightId} недоступен для покупки билетов (статус: {flight_data['status']})")
             raise HTTPException(status_code=409, detail="Рейс недоступен для покупки билетов")
         current_count = flight_ticket_count.get(flightId, 0)
@@ -67,10 +70,48 @@ def check_flight_availability(flightId: str) -> dict:
         logger.error(f"Ошибка при запросе к Табло для рейса {flightId}: {e}")
         raise HTTPException(status_code=404, detail="Рейс не найден или Табло недоступно")
 
+# Функция для автоматической отправки билетов
+def auto_send_tickets_to_checkin():
+    logger.info("Проверка статусов рейсов для автоматической отправки билетов в Check-In")
+    for flightId in flight_ticket_count.keys():
+        if flightId in sent_to_checkin:
+            continue  # Пропускаем, если билеты уже отправлены
+
+        try:
+            response = requests.get(f"{TABLO_API_URL}/{flightId}")
+            response.raise_for_status()
+            flight_data = response.json()
+            current_status = flight_data["status"]
+            logger.info(f"Статус рейса {flightId}: {current_status}")
+
+            if current_status == "RegistrationOpen":
+                active_tickets = [ticket.dict() for ticket in tickets_db.values()
+                                  if ticket.flightId == flightId and ticket.status == "active"]
+                if active_tickets:
+                    try:
+                        checkin_response = requests.post(
+                            f"{CHECKIN_API_URL}/tickets",
+                            json={"flightId": flightId, "tickets": active_tickets}
+                        )
+                        checkin_response.raise_for_status()
+                        logger.info(f"Автоматически отправлено {len(active_tickets)} билетов для рейса {flightId} в Check-In")
+                        sent_to_checkin.add(flightId)  # Помечаем рейс как обработанный
+                    except requests.RequestException as e:
+                        logger.error(f"Ошибка при автоматической отправке билетов для рейса {flightId}: {e}")
+        except requests.RequestException as e:
+            logger.error(f"Ошибка при проверке статуса рейса {flightId}: {e}")
+
+# Инициализация планировщика
+scheduler = BackgroundScheduler()
+scheduler.add_job(auto_send_tickets_to_checkin, 'interval', seconds=5)  # Проверка каждые 5 секунд
+
+# Жизненный цикл приложения
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Запуск модуля Касса")
+    scheduler.start()
     yield
+    scheduler.shutdown()
     logger.info("Остановка модуля Касса")
 
 app = FastAPI(title="Ticket Sales Module", lifespan=lifespan)
@@ -160,7 +201,6 @@ def send_tickets_to_checkin(flightId: str):
         response = requests.get(f"{TABLO_API_URL}/{flightId}")
         response.raise_for_status()
         flight_data = response.json()
-        logger.info(f"Статус рейса {flightId} получен: {flight_data.get('status')}")
         if flight_data["status"] != "RegistrationOpen":
             logger.error(f"Регистрация на рейс {flightId} ещё не открыта (статус: {flight_data['status']})")
             raise HTTPException(status_code=400, detail="Регистрация на рейс ещё не открыта")
@@ -168,15 +208,13 @@ def send_tickets_to_checkin(flightId: str):
         logger.error(f"Ошибка при проверке рейса {flightId}: {e}")
         raise HTTPException(status_code=503, detail="Ошибка при проверке рейса")
 
-    # Собираем активные билеты для рейса
     active_tickets = [ticket.dict() for ticket in tickets_db.values()
                       if ticket.flightId == flightId and ticket.status == "active"]
-    logger.info(f"Активные билеты для рейса {flightId}: {active_tickets}")
+    logger.info(f"Подготовлено {len(active_tickets)} активных билетов для рейса {flightId}: {[t['ticketId'] for t in active_tickets]}")
     if not active_tickets:
         logger.info(f"Нет активных билетов для рейса {flightId}")
         return {"status": "success", "message": "Нет активных билетов для отправки"}
 
-    # Отправляем билеты в Check-In
     try:
         checkin_response = requests.post(
             f"{CHECKIN_API_URL}/tickets",
@@ -184,6 +222,7 @@ def send_tickets_to_checkin(flightId: str):
         )
         checkin_response.raise_for_status()
         logger.info(f"Билеты для рейса {flightId} успешно отправлены в Check-In")
+        sent_to_checkin.add(flightId)  # Если у вас есть множество для пометки отправленных рейсов
         return {"status": "success", "message": f"Отправлено {len(active_tickets)} билетов для рейса {flightId}"}
     except requests.RequestException as e:
         logger.error(f"Ошибка при отправке билетов в Check-In для рейса {flightId}: {e}")
