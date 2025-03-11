@@ -4,16 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Все модули на всякий случай">
-      <change beforePath="$PROJECT_DIR$/.idea/Airport.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Airport.iml" afterDir="false" />
+    <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Все модули обновлены">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/checkin_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/checkin_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db.py" beforeDir="false" afterPath="$PROJECT_DIR$/db.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/flights_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/flights_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/passengers_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/passengers_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tickets_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tickets_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/time_control.py" beforeDir="false" afterPath="$PROJECT_DIR$/time_control.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -151,7 +144,15 @@
       <option name="project" value="LOCAL" />
       <updated>1741620451901</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Все модули обновлены">
+      <option name="closed" value="true" />
+      <created>1741690304669</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1741690304669</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -167,6 +168,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Все модули на всякий случай" />
-    <option name="LAST_COMMIT_MESSAGE" value="Все модули на всякий случай" />
+    <MESSAGE value="Все модули обновлены" />
+    <option name="LAST_COMMIT_MESSAGE" value="Все модули обновлены" />
   </component>
 </project>

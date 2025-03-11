@@ -306,11 +306,6 @@ def update_passenger_state(passengerId: str, state: str = Body(..., embed=True))
     return passenger
 
 
-# UI: Главная страница
-@app.get("/ui", response_class=HTMLResponse)
-async def ui_home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "passengers": list(passengers_db.values())})
-
 
 # UI: Установка VIP-статуса
 @app.post("/ui/set_vip", response_class=RedirectResponse)
@@ -322,6 +317,17 @@ async def ui_set_vip(passenger_id: str = Form(...)):
     logger.info(f"У пассажира {passenger.name} (ID: {passenger.id}) установлен VIP-статус")
     return RedirectResponse(url="/ui", status_code=303)
 
+@app.post("/ui/toggle_vip", response_class=RedirectResponse)
+async def ui_toggle_vip(request: Request, passenger_id: str = Form(...)):
+    passenger = passengers_db.get(passenger_id)
+    if not passenger:
+        raise HTTPException(status_code=404, detail="Пассажир не найден")
+    old_status = passenger.isVIP
+    passenger.isVIP = not old_status
+    logger.info(f"Пассажиру {passenger.name} (ID: {passenger.id}) VIP статус изменён с {old_status} на {passenger.isVIP}")
+    return RedirectResponse(url="/ui", status_code=303)
+
+faked_tickets = set()
 
 # UI: Подделка билета
 @app.post("/ui/fake_ticket", response_class=RedirectResponse)
@@ -329,12 +335,64 @@ async def ui_fake_ticket(passenger_id: str = Form(...)):
     passenger = passengers_db.get(passenger_id)
     if not passenger or not passenger.ticket:
         raise HTTPException(status_code=400, detail="Пассажир не найден или нет билета")
+
+    # Сначала проверяем статус рейса пассажира
+    flight_data = check_flight(passenger.flightId)  # Используем вашу функцию check_flight
+    if flight_data["status"] != "Scheduled":
+        # Если статус не Scheduled, возвращаем ошибку
+        raise HTTPException(
+            status_code=400,
+            detail=f"Подделать билет невозможно, так как рейс '{passenger.flightId}' имеет статус: {flight_data['status']}"
+        )
+
+    # Старый билет
     old_ticket = passenger.ticket.ticketId
+
+    # Создаем новый ticketId (подделка)
     new_ticket_data = passenger.ticket.dict()
     new_ticket_data["ticketId"] = str(uuid.uuid4())
     passenger.ticket = Ticket(**new_ticket_data)
-    logger.info(f"Билет пассажира {passenger.name} изменён с {old_ticket} на {new_ticket_data['ticketId']}")
+
+    logger.info(
+        f"Билет пассажира {passenger.name} (ID: {passenger.id}) изменён "
+        f"с {old_ticket} на {new_ticket_data['ticketId']}"
+    )
+
+    # Помечаем в наборе, что у этого пассажира билет «подделан»
+    faked_tickets.add(passenger_id)
+
     return RedirectResponse(url="/ui", status_code=303)
+
+
+
+
+@app.post("/ui/create_passenger", response_class=RedirectResponse)
+async def ui_create_passenger(
+    request: Request,
+    name: str = Form(...),
+    flightId: str = Form(...),
+    baggageWeight: int = Form(...),
+    menuType: str = Form(...),
+    isVIP: Optional[bool] = Form(False)
+):
+    passenger = create_passenger_instance(name, flightId, baggageWeight, menuType, isVIP)
+    logger.info(f"Пассажир {name} создан вручную через UI, ID: {passenger.id}")
+    return RedirectResponse(url="/ui", status_code=303)
+
+#########################
+# UI главной страницы
+#########################
+@app.get("/ui", response_class=HTMLResponse)
+async def ui_home(request: Request):
+    # Передаем список пассажиров и наш набор подделанных билетов
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "passengers": list(passengers_db.values()),
+            "faked_tickets": faked_tickets
+        }
+    )
 
 
 if __name__ == "__main__":
