@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>UI модуля пассажиров</title>
+    <script>
+        function sortTableByColumn(tableId, columnIndex) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            let rows = Array.from(table.querySelectorAll('tbody tr'));
+            let currentDirection = table.getAttribute('data-sort-direction') || 'asc';
+            let newDirection = (currentDirection === 'asc') ? 'desc' : 'asc';
+            table.setAttribute('data-sort-direction', newDirection);
+
+            rows.sort((rowA, rowB) => {
+                let cellA = rowA.querySelectorAll('td')[columnIndex].innerText;
+                let cellB = rowB.querySelectorAll('td')[columnIndex].innerText;
+                if (newDirection === 'asc') {
+                    return cellA.localeCompare(cellB);
+                } else {
+                    return cellB.localeCompare(cellA);
+                }
+            });
+
+            let tbody = table.querySelector('tbody');
+            rows.forEach(row => tbody.appendChild(row));
+        }
+    </script>
+    <style>
+        .container {
+            display: flex;
+        }
+        .left {
+            flex: 1;
+        }
+        .right {
+            flex: 1;
+            margin-left: 20px;
+        }
+
+        /* Фон для подделанных билетов */
+        .faked {
+            background-color: #ffcccc; /* светло-красный, например */
+        }
+    </style>
+</head>
+<body>
+    <h1>Список пассажиров</h1>
+    <div class="container">
+        <!-- Левая часть: таблица -->
+        <div class="left">
+            <table id="passengers-table" border="1" cellspacing="0" cellpadding="5" data-sort-direction="asc">
+                <thead>
+                    <tr>
+                        <th onclick="sortTableByColumn('passengers-table', 0)">Время</th>
+                        <th onclick="sortTableByColumn('passengers-table', 1)">Рейс</th>
+                        <th>ID</th>
+                        <th>Имя</th>
+                        <th>Статус</th>
+                        <th>Вес багажа</th>
+                        <th>Тип питания</th>
+                        <th>VIP</th>
+                        <th>Билет</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for p in passengers %}
+                <!-- Проверяем, есть ли ID в наборе faked_tickets -->
+                <tr {% if p.id in faked_tickets %}class="faked"{% endif %}>
+                    <td>
+                      {% if p.ticket and p.ticket.flightDepartureTime %}
+                        {{ p.ticket.flightDepartureTime.split("T")[1][:5] }}
+                      {% else %}
+                        N/A
+                      {% endif %}
+                    </td>
+                    <td>{{ p.flightId }}</td>
+                    <td>{{ p.id }}</td>
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.state }}</td>
+                    <td>{{ p.baggageWeight }}</td>
+                    <td>{{ p.menuType }}</td>
+                    <td>{{ p.isVIP }}</td>
+                    <td>
+                        {% if p.ticket %}
+                            {{ p.ticket.ticketId }}
+                            {% if p.id in faked_tickets %}
+                              <strong>(Подделан)</strong>
+                            {% endif %}
+                        {% else %}
+                            Нет
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Правая часть: формы -->
+        <div class="right">
+            <h2>Переключить VIP-статус</h2>
+            <form action="/ui/toggle_vip" method="post">
+                <label for="passenger_id_vip">Введите ID пассажира:</label><br>
+                <input type="text" name="passenger_id" id="passenger_id_vip" required><br>
+                <button type="submit">Переключить VIP</button>
+            </form>
+
+            <h2>Подделать билет</h2>
+            <form action="/ui/fake_ticket" method="post">
+                <label for="passenger_id_ticket">Введите ID пассажира:</label><br>
+                <input type="text" name="passenger_id" id="passenger_id_ticket" required><br>
+                <button type="submit">Подделать билет</button>
+            </form>
+
+            <h2>Создать нового пассажира вручную</h2>
+            <form action="/ui/create_passenger" method="post">
+                <label for="name">Имя:</label><br>
+                <input type="text" name="name" id="name" required><br>
+                <label for="flightId">Рейс:</label><br>
+                <input type="text" name="flightId" id="flightId" required><br>
+                <label for="baggageWeight">Вес багажа:</label><br>
+                <input type="number" name="baggageWeight" id="baggageWeight" required><br>
+                <label for="menuType">Тип питания:</label><br>
+                <select name="menuType" id="menuType">
+                    <option value="meat">meat</option>
+                    <option value="chicken">chicken</option>
+                    <option value="fish">fish</option>
+                    <option value="vegan">vegan</option>
+                </select><br>
+                <label for="isVIP">VIP:</label>
+                <input type="checkbox" name="isVIP" id="isVIP"><br>
+                <button type="submit">Создать пассажира</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
