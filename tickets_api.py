@@ -38,8 +38,9 @@ class Ticket(BaseModel):
     isVIP: bool
     menuType: str
     baggageWeight: int
-    status: str = "active"
-    createdAt: str = None
+    status: str         # "active", "returned", "fake", ...
+    isFake: bool = False  # новое поле, по умолчанию False
+    createdAt: str
     gate: Optional[str] = None
     seatNumber: Optional[str] = None
     flightDepartureTime: Optional[str] = None
@@ -48,6 +49,7 @@ class Ticket(BaseModel):
 
     class Config:
         json_encoders = {"datetime": lambda v: v.isoformat()}
+
 
 # In-memory база билетов и счётчик билетов на рейс
 tickets_db = {}
@@ -87,8 +89,12 @@ def auto_send_tickets_to_checkin():
             logger.info(f"Статус рейса {flightId}: {current_status}")
 
             if current_status == "RegistrationOpen":
-                active_tickets = [ticket.dict() for ticket in tickets_db.values()
-                                  if ticket.flightId == flightId and ticket.status == "active"]
+                # Фильтруем билеты: выбираем только активные билеты, которые не подделаны
+                active_tickets = [
+                    ticket.dict() for ticket in tickets_db.values()
+                    if ticket.flightId == flightId and ticket.status == "active" and not ticket.isFake
+                ]
+
                 if active_tickets:
                     try:
                         checkin_response = requests.post(
@@ -96,12 +102,13 @@ def auto_send_tickets_to_checkin():
                             json={"flightId": flightId, "tickets": active_tickets}
                         )
                         checkin_response.raise_for_status()
-                        logger.info(f"Автоматически отправлено {len(active_tickets)} билетов для рейса {flightId} в Check-In")
-                        sent_to_checkin.add(flightId)  # Помечаем рейс как обработанный
+                        logger.info(f"Отправлено {len(active_tickets)} билетов для рейса {flightId} в Check-In")
+                        sent_to_checkin.add(flightId)
                     except requests.RequestException as e:
-                        logger.error(f"Ошибка при автоматической отправке билетов для рейса {flightId}: {e}")
+                        logger.error(f"Ошибка при отправке билетов для рейса {flightId}: {e}")
         except requests.RequestException as e:
             logger.error(f"Ошибка при проверке статуса рейса {flightId}: {e}")
+
 
 # Инициализация планировщика
 scheduler = BackgroundScheduler()
@@ -118,11 +125,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Ticket Sales Module", lifespan=lifespan)
 
+
 @app.get("/v1/tickets", response_model=List[Ticket])
 def get_all_tickets():
-    tickets = list(tickets_db.values())
-    logger.info(f"Запрошен список всех билетов: {len(tickets)} записей")
+    # Возвращаем только "настоящие" билеты, исключая подделанные
+    tickets = [ticket for ticket in tickets_db.values() if ticket.status == "active"]
+    logger.info(f"Запрошен список билетов (без подделок): {len(tickets)} записей")
     return tickets
+
 
 @app.get("/v1/tickets/{ticketId}", response_model=Ticket)
 def get_ticket(ticketId: str):
@@ -173,6 +183,7 @@ def buy_ticket(request: BuyTicketRequest = Body(...)):
     print("-------------------\n")
     return ticket
 
+
 @app.post("/v1/tickets/refund", response_model=Ticket)
 def refund_ticket(ticketId: str, passengerId: str):
     ticket = tickets_db.get(ticketId)
@@ -188,7 +199,20 @@ def refund_ticket(ticketId: str, passengerId: str):
         logger.error(f"Билет {ticketId} уже возвращён")
         raise HTTPException(status_code=409, detail="Билет уже возвращён")
 
-    # Обновляем статус билета
+    # Проверяем статус рейса через Табло
+    try:
+        response = requests.get(f"{TABLO_API_URL}/{ticket.flightId}")
+        response.raise_for_status()
+        flight_data = response.json()
+        if flight_data["status"] != "Scheduled":
+            logger.error(
+                f"Рейс {ticket.flightId} имеет статус {flight_data['status']}. Возврат разрешён только для рейсов со статусом Scheduled")
+            raise HTTPException(status_code=400, detail="Возврат возможен только для рейсов со статусом Scheduled")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка проверки рейса {ticket.flightId}: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка проверки статуса рейса")
+
+    # Обновляем статус билета и уменьшаем счётчик
     ticket.status = "returned"
     flight_ticket_count[ticket.flightId] = flight_ticket_count.get(ticket.flightId, 0) - 1
 
@@ -201,7 +225,6 @@ def refund_ticket(ticketId: str, passengerId: str):
     print("---------------------\n")
 
     return ticket
-
 
 
 @app.post("/v1/tickets/send-to-checkin/{flightId}", response_model=dict)
@@ -218,8 +241,10 @@ def send_tickets_to_checkin(flightId: str):
         logger.error(f"Ошибка при проверке рейса {flightId}: {e}")
         raise HTTPException(status_code=503, detail="Ошибка при проверке рейса")
 
-    active_tickets = [ticket.dict() for ticket in tickets_db.values()
-                      if ticket.flightId == flightId and ticket.status == "active"]
+    active_tickets = [
+        ticket.dict() for ticket in tickets_db.values()
+        if ticket.flightId == flightId and ticket.status == "active" and not ticket.isFake
+    ]
     logger.info(f"Подготовлено {len(active_tickets)} активных билетов для рейса {flightId}: {[t['ticketId'] for t in active_tickets]}")
     if not active_tickets:
         logger.info(f"Нет активных билетов для рейса {flightId}")
@@ -232,11 +257,12 @@ def send_tickets_to_checkin(flightId: str):
         )
         checkin_response.raise_for_status()
         logger.info(f"Билеты для рейса {flightId} успешно отправлены в Check-In")
-        sent_to_checkin.add(flightId)  # Если у вас есть множество для пометки отправленных рейсов
+        sent_to_checkin.add(flightId)
         return {"status": "success", "message": f"Отправлено {len(active_tickets)} билетов для рейса {flightId}"}
     except requests.RequestException as e:
         logger.error(f"Ошибка при отправке билетов в Check-In для рейса {flightId}: {e}")
         raise HTTPException(status_code=503, detail="Ошибка при отправке билетов в Check-In")
+
 
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse

@@ -7,7 +7,7 @@ from db import flights_db
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("TimeControl")
 
-simulation_time = datetime(2025, 3, 15, 8, 47)
+simulation_time = datetime(2025, 3, 15, 7, 27)
 time_speed_multiplier = 60 * 0.5  # 1 минут игрового времени за 1 секунду реального
 
 def update_simulation_time():

@@ -87,11 +87,10 @@
               <td>{{ p.menuType }}</td>
               <td>{{ p.isVIP }}</td>
               <td>
-                {% if p.ticket %}
+                {% if p.forgedTicket %}
+                  {{ p.forgedTicket.ticketId }} <span class="badge bg-danger">Подделан</span>
+                {% elif p.ticket %}
                   {{ p.ticket.ticketId }}
-                  {% if p.id in faked_tickets %}
-                    <span class="badge bg-danger">Подделан</span>
-                  {% endif %}
                 {% else %}
                   <span class="text-muted">Нет</span>
                 {% endif %}

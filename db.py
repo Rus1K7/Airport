@@ -14,6 +14,7 @@ class FlightData(BaseModel):
     gate: Optional[str] = None
     planeParking: Optional[str] = None
     runway: Optional[str] = None
+    requiredFuel: int
 
     class Config:
         json_encoders = {
@@ -31,9 +32,10 @@ def load_demo_flights():
             scheduledTime=datetime(2025, 3, 15, 9, 0),
             arrivalTime=None,
             status="Scheduled",
-            gate="G-2",  # Назначаем гейт, так как "depart"
-            planeParking="P-1",  # Назначаем парковку, так как "depart"
-            runway=None
+            gate="G-1",  # Назначаем гейт, так как "depart"
+            planeParking="P-5",  # Назначаем парковку, так как "depart"
+            runway=None,
+            requiredFuel=3000
         ),
         FlightData(
             flightId="FL999",
@@ -41,13 +43,14 @@ def load_demo_flights():
             type="arrive",  # Прилетает к нам
             fromCity="Berlin",
             toCity="Moscow",
-            scheduledTime=datetime(2025, 3, 15, 10, 30),
+            scheduledTime=datetime(2025, 3, 15, 9, 30),
             arrivalTime=None,
             status="PlanningArrive",
-            gate=None,  # Не назначаем гейт, ждём Ground Control
-            planeParking=None,  # Не назначаем парковку, ждём Ground Control
-            runway="R-2"  # Указываем ВПП для посадки
-        ),
+            gate="G-4",  # Не назначаем гейт, ждём Ground Control
+            planeParking="P-4",  # Не назначаем парковку, ждём Ground Control
+            runway="R-5",  # Указываем ВПП для посадки
+            requiredFuel = 3000
+    ),
         FlightData(
             flightId="FL456",
             planeId="PL002",
@@ -58,8 +61,9 @@ def load_demo_flights():
             arrivalTime=None,
             status="Scheduled",
             gate="G-3",  # Назначаем гейт, так как "depart"
-            planeParking="P-2",  # Назначаем парковку, так как "depart"
-            runway=None
+            planeParking="P-4",  # Назначаем парковку, так как "depart"
+            runway=None,
+            requiredFuel=3000
         ),
     ]
     return {flight.flightId: flight for flight in demo_flights}

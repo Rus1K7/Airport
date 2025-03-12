@@ -62,6 +62,7 @@ def update_flight_statuses():
         delta = flight.scheduledTime - sim_time
         minutes_left = delta.total_seconds() / 60.0
 
+
         if flight.type == "depart":
             if minutes_left <= 0:
                 flight.status = "Departed"
@@ -76,6 +77,8 @@ def update_flight_statuses():
         elif flight.type == "arrive":
             if minutes_left <= 0:
                 flight.status = "Arrived"
+            elif minutes_left <= 30:
+                flight.status = "SoonArrived"
             else:
                 # Для прилета можно оставить статус Scheduled (или задать иной, например "EnRoute")
                 flight.status = "PlanningArrive"
@@ -182,5 +185,5 @@ async def ui_tablo(request: Request):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("flights_api:app", host="localhost", port=8008, reload=True)  # Исправил хост на ваш предыдущий
+    uvicorn.run("flights_api:app", host="localhost", port=8003, reload=True)  # Исправил хост на ваш предыдущий
     # порт 8003

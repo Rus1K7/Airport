@@ -37,7 +37,8 @@ class Ticket(BaseModel):
     isVIP: bool
     menuType: str
     baggageWeight: int
-    status: str
+    status: str         # "active", "returned", "fake", ...
+    isFake: bool = False  # новое поле, по умолчанию False
     createdAt: str
     gate: Optional[str] = None
     seatNumber: Optional[str] = None
@@ -49,6 +50,7 @@ class Ticket(BaseModel):
         json_encoders = {"datetime": lambda v: v.isoformat()}
 
 
+
 # Модель данных для пассажира
 class Passenger(BaseModel):
     id: str
@@ -56,8 +58,9 @@ class Passenger(BaseModel):
     flightId: str
     baggageWeight: int
     menuType: str
-    ticket: Optional[Ticket] = None
-    state: str = "CameToAirport"  # Возможные состояния
+    ticket: Optional[Ticket] = None  # Оригинальный билет из Ticket Sales
+    forgedTicket: Optional[Ticket] = None  # Подделка (отображается у пассажира)
+    state: str = "CameToAirport"
     isVIP: bool
 
     class Config:
@@ -67,6 +70,10 @@ class Passenger(BaseModel):
 # База данных пассажиров и подделанных билетов
 passengers_db = {}
 faked_tickets = set()
+
+# Модель ответа, содержащая список идентификаторов пассажиров
+class PassengersIDs(BaseModel):
+    passengers: List[str]
 
 # Константы
 MENU_TYPES = ["meat", "chicken", "fish", "vegan"]
@@ -203,23 +210,99 @@ def auto_checkin_passengers():
                 if flight_data["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
                     logger.debug(f"Регистрация для {passenger.name} невозможна, статус: {flight_data['status']}")
                     continue
+                if passenger.forgedTicket:
+                    ticket_id_for_checkin = passenger.forgedTicket.ticketId
+                    logger.info(f"Пассажир {passenger.name} проходит с подделанным билетом {ticket_id_for_checkin}")
+                else:
+                    ticket_id_for_checkin = passenger.ticket.ticketId
+
                 logger.debug(
-                    f"Регистрация {passenger.name}: {passenger.flightId}, {passenger.id}, {passenger.ticket.ticketId}")
+                    f"Регистрация {passenger.name}: {passenger.flightId}, {passenger.id}, {ticket_id_for_checkin}")
                 checkin_response = requests.post(f"{CHECKIN_API_URL}/start", json={
-                    "flightId": passenger.flightId, "passengerId": passenger.id, "ticketId": passenger.ticket.ticketId
+                    "flightId": passenger.flightId, "passengerId": passenger.id, "ticketId": ticket_id_for_checkin
                 })
                 checkin_response.raise_for_status()
                 checkin_data = checkin_response.json()
-                passenger.state = "CheckedIn"
-                logger.info(f"Автоматическая регистрация {passenger.name}, checkInId: {checkin_data['checkInId']}")
+                if passenger.forgedTicket:
+                    passenger.state = "CameToAirport"
+                    logger.info(
+                        f"Пассажир {passenger.name} вернулся в аэропорт, не прошел регистрацию с подделанным билетом")
+                else:
+                    passenger.state = "CheckedIn"
+                    logger.info(f"Автоматическая регистрация {passenger.name}, checkInId: {checkin_data['checkInId']}")
+
             except requests.RequestException as e:
                 logger.error(f"Ошибка автоматической регистрации {passenger.name}: {e}")
+
+
+import time
+from threading import Timer
+
+# Функция для покупки нового билета
+def buy_new_ticket(passenger):
+    available_flights = get_available_flights()
+    if not available_flights:
+        logger.info(f"Нет доступных рейсов для пассажира {passenger.name} (ID: {passenger.id})")
+        return
+
+    new_flight = random.choice(available_flights)["flightId"]
+    logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) пытается купить новый билет на рейс {new_flight}")
+
+    try:
+        ticket_response = requests.post(TICKETS_API_URL, json={
+            "passengerId": passenger.id,
+            "passengerName": passenger.name,
+            "flightId": new_flight,
+            "isVIP": passenger.isVIP,
+            "menuType": passenger.menuType,
+            "baggageWeight": passenger.baggageWeight
+        })
+        ticket_response.raise_for_status()
+        ticket_data = ticket_response.json()
+
+        # Новый билет должен быть настоящим
+        passenger.ticket = Ticket(**ticket_data)
+        passenger.flightId = new_flight
+        passenger.state = "GotTicket"
+
+        # Убираем подделанный билет, если он был
+        passenger.forgedTicket = None
+
+        logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) купил новый билет {ticket_data['ticketId']}")
+
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при покупке нового билета для {passenger.name}: {e}")
+
+# Функция обновления статуса пассажиров после закрытия регистрации
+def update_passenger_status_after_registration():
+    """
+    Проверяет, закрыта ли регистрация на рейс, и меняет статус пассажиров с "GotTicket" на "CameToAirport".
+    """
+    passengers_snapshot = list(passengers_db.values())  # Создаем копию списка пассажиров
+    checked_flights = {}  # Кэш для статусов рейсов
+
+    for passenger in passengers_snapshot:
+        if passenger.state == "GotTicket":
+            if passenger.flightId not in checked_flights:
+                flight_data = check_flight(passenger.flightId)
+                checked_flights[passenger.flightId] = flight_data["status"]  # Запоминаем статус рейса
+
+            if checked_flights[passenger.flightId] == "RegistrationClosed":
+                passenger.state = "CameToAirport"
+
+                # Запускаем покупку нового билета через 10 секунд
+                Timer(10, buy_new_ticket, [passenger]).start()
+
+                logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) теперь в статусе 'CameToAirport', так как регистрация закрыта.")
+
+
 
 # Инициализация планировщика
 scheduler = BackgroundScheduler()
 scheduler.add_job(generate_passenger, 'interval', seconds=3)
 scheduler.add_job(print_passengers_table, 'interval', seconds=60)
-scheduler.add_job(auto_checkin_passengers, 'interval', seconds=3)
+scheduler.add_job(auto_checkin_passengers, 'interval', seconds=5)
+scheduler.add_job(update_passenger_status_after_registration, 'interval', seconds=120)
 
 
 # Запуск приложения
@@ -265,6 +348,40 @@ def get_passengers_by_flight(flightId: str):
     logger.info(f"Запрошены пассажиры рейса {flightId}: найдено {len(passengers)}")
     return passengers
 
+# Получение пассажиров по рейсу (возвращаются только те, кто CheckedIn)
+@app.get("/v1/passengersId/flight/{flightId}", response_model=PassengersIDs)
+def get_passenger_ids_by_flight(flightId: str):
+    """
+    Получение списка ID пассажиров с рейса, у которых статус CheckedIn.
+    """
+    checked_in_passengers = [p for p in passengers_db.values() if p.flightId == flightId and p.state == "CheckedIn"]
+
+    if checked_in_passengers:  # Проверяем, есть ли пассажиры со статусом CheckedIn
+        for passenger in checked_in_passengers:
+            passenger.state = "OnBus"  # Меняем статус на "OnBus"
+
+    logger.info(f"Запрошены ID пассажиров рейса {flightId} со статусом CheckedIn: найдено {len(checked_in_passengers)}")
+
+    return {"passengers": [p.id for p in checked_in_passengers]}
+
+
+@app.post("/v1/passengers/board", response_model=dict)
+def mark_passengers_onboard(passenger_ids: List[str] = Body(...)):
+    """
+    Устанавливает статус "Boarded" для списка пассажиров, которые были CheckedIn.
+    """
+    updated_count = 0
+
+    for passenger_id in passenger_ids:
+        passenger = passengers_db.get(passenger_id)
+        if passenger and (passenger.state == "CheckedIn" or passenger.state == "OnBus"):
+            passenger.state = "Boarded"
+            updated_count += 1
+            logger.info(f"Пассажир {passenger.name} (ID: {passenger_id}) теперь на борту (Boarded).")
+
+    return {"status": "success", "updated": updated_count}
+
+
 
 # Получение пассажира по ID
 @app.get("/v1/passengers/{passengerId}", response_model=Passenger)
@@ -283,20 +400,35 @@ def checkin_passenger(passengerId: str):
     passenger = passengers_db.get(passengerId)
     if not passenger or passenger.state != "GotTicket":
         raise HTTPException(status_code=400, detail="Пассажир не может зарегистрироваться")
+
+    # Если существует forgedTicket, используем его номер для регистрации
+    if passenger.forgedTicket:
+        ticket_id_for_checkin = passenger.forgedTicket.ticketId
+        logger.info(f"Пассажир {passenger.name} проходит с подделанным билетом {ticket_id_for_checkin}")
+    else:
+        ticket_id_for_checkin = passenger.ticket.ticketId
+
     try:
-        logger.debug(f"Регистрация {passenger.name}: {passenger.flightId}, {passenger.id}, {passenger.ticket.ticketId}")
-        checkin_response = requests.post(f"{CHECKIN_API_URL}/start", json={
-            "flightId": passenger.flightId, "passengerId": passenger.id, "ticketId": passenger.ticket.ticketId
-        })
+        checkin_response = requests.post(
+            f"{CHECKIN_API_URL}/start",
+            json={
+                "flightId": passenger.flightId,
+                "passengerId": passenger.id,
+                "ticketId": ticket_id_for_checkin
+            }
+        )
         checkin_response.raise_for_status()
         checkin_data = checkin_response.json()
-        passenger.state = "CheckedIn"
-        logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
-        passenger.state = "ReadyForBus"
-        logger.info(f"Пассажир {passenger.name} готов к посадке в автобус")
+        if passenger.forgedTicket:
+            passenger.state = "CameToAirport"
+            logger.info(f"Пассажир {passenger.name} вернулся в аэропорт, не прошел регистрацию с подделанным билетом")
+        else:
+            passenger.state = "CheckedIn"
+            logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
     except requests.RequestException as e:
         logger.error(f"Ошибка при регистрации {passenger.name}: {e}")
         raise HTTPException(status_code=503, detail="Ошибка при регистрации")
+
     return passenger
 
 
@@ -326,16 +458,16 @@ def get_reg_flights() -> List[dict]:
         logger.error(f"Ошибка при запросе рейсов для регистрации: {e}")
         return []
 
-
 def update_passenger_ticket(passenger):
     try:
         response = requests.get(f"http://172.20.10.2:8005/v1/tickets/passenger/{passenger.id}")
         response.raise_for_status()
         tickets = response.json()
         active_tickets = [t for t in tickets if t["status"] == "active"]
-        if active_tickets:
-            passenger.ticket = Ticket(**active_tickets[0])  # Преобразуем словарь в объект Ticket
-        else:
+        # Если у пассажира уже есть forgedTicket, не меняем его
+        if active_tickets and not passenger.forgedTicket:
+            passenger.ticket = Ticket(**active_tickets[0])
+        elif not active_tickets:
             passenger.ticket = None
     except Exception as e:
         logger.error(f"Ошибка обновления билета для пассажира {passenger.id}: {e}")
@@ -411,20 +543,31 @@ async def ui_register_all(request: Request, flightId: str = Form(...)):
     for passenger in passengers_db.values():
         if passenger.flightId == flightId and passenger.state == "GotTicket" and passenger.ticket:
             try:
+                if passenger.forgedTicket:
+                    ticket_id_for_checkin = passenger.forgedTicket.ticketId
+                    logger.info(
+                        f"Пассажир {passenger.name} пытается пройти с подделанным билетом {ticket_id_for_checkin}")
+                else:
+                    ticket_id_for_checkin = passenger.ticket.ticketId
+
                 # Проверяем, является ли ticket словарем, и преобразуем в объект Ticket
                 if isinstance(passenger.ticket, dict):
                     passenger.ticket = Ticket(**passenger.ticket)
                 checkin_response = requests.post(f"{CHECKIN_API_URL}/start", json={
                     "flightId": passenger.flightId,
                     "passengerId": passenger.id,
-                    "ticketId": passenger.ticket.ticketId  # Теперь ticketId доступен
+                    "ticketId": ticket_id_for_checkin  # Теперь ticketId доступен
                 })
                 checkin_response.raise_for_status()
                 checkin_data = checkin_response.json()
-                passenger.state = "CheckedIn"
-                logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
-                passenger.state = "ReadyForBus"
-                count_registered += 1
+                if passenger.forgedTicket:
+                    passenger.state = "CameToAirport"
+                    logger.info(
+                        f"Пассажир {passenger.name} вернулся в аэропорт, не прошел регистрацию с подделанным билетом")
+                else:
+                    passenger.state = "CheckedIn"
+                    logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
+                    count_registered += 1
             except requests.RequestException as e:
                 logger.error(f"Ошибка регистрации пассажира {passenger.name}: {e}")
                 continue
@@ -438,6 +581,17 @@ async def ui_toggle_vip(passenger_id: str = Form(...)):
     passenger = passengers_db.get(passenger_id)
     if not passenger:
         raise HTTPException(status_code=404, detail="Пассажир не найден")
+
+    # Получаем информацию о рейсе, к которому приписан пассажир
+    flight_data = check_flight(passenger.flightId)
+    # Разрешаем переключать VIP-статус только при статусе Scheduled
+    if flight_data["status"] != "Scheduled":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Нельзя переключить VIP-статус: рейс имеет статус {flight_data['status']}. Требуется Scheduled."
+        )
+
+    # Если статус рейса — Scheduled, переключаем статус VIP
     passenger.isVIP = not passenger.isVIP
     logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) VIP статус изменён на {passenger.isVIP}")
     return RedirectResponse(url="/ui", status_code=303)
@@ -449,18 +603,28 @@ async def ui_fake_ticket(passenger_id: str = Form(...)):
     passenger = passengers_db.get(passenger_id)
     if not passenger or not passenger.ticket:
         raise HTTPException(status_code=400, detail="Пассажир не найден или нет билета")
+
     flight_data = check_flight(passenger.flightId)
     if flight_data["status"] != "Scheduled":
         raise HTTPException(status_code=400, detail=f"Подделка невозможна, статус рейса: {flight_data['status']}")
 
-    old_ticket = passenger.ticket.ticketId
+    old_ticket_id = passenger.ticket.ticketId
+    new_ticket_id = str(uuid.uuid4())
     new_ticket_data = passenger.ticket.dict()
-    new_ticket_data["ticketId"] = str(uuid.uuid4())
-    passenger.ticket = Ticket(**new_ticket_data)
+    new_ticket_data["ticketId"] = new_ticket_id
+    new_ticket_data["status"] = "fake"
+    new_ticket_data["isFake"] = True
+
+    # Сохраняем подделанный билет отдельно; оригинальный билет (passenger.ticket) остается без изменений
+    passenger.forgedTicket = Ticket(**new_ticket_data)
+
+    # Можно добавить запись в faked_tickets, если требуется для отображения
     faked_tickets.add(passenger_id)
-    logger.info(f"Билет пассажира {passenger.name} изменён с {old_ticket} на {new_ticket_data['ticketId']}")
+
+    logger.info(f"Билет пассажира {passenger.name} подделан: {old_ticket_id} -> {new_ticket_id}")
     return RedirectResponse(url="/ui", status_code=303)
 
 
+
 if __name__ == "__main__":
-    uvicorn.run("passengers_api:app", host="172.20.10.2", port=8004, reload=True)
+    uvicorn.run("passengers_api:app", host="localhost", port=8004, reload=True)

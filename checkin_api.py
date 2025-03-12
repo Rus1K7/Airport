@@ -13,14 +13,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("CheckInAPI")
 
 # URL модулей (укажите корректные адреса)
-PASSENGERS_API_URL = "http://172.20.10.2:8004/v1/passengers"
+PASSENGERS_API_URL = "http://localhost:8004/v1/passengers"
 TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets"
 
 # FLIGHTS_API_URL = "http://172.20.10.2:8003/v1/flights"
 FLIGHTS_API_URL = "http://localhost:8003/v1/flights"  # Табло
 
 BAGGAGE_API_URL = "http://172.20.10.2:8007/v1/baggage"      # Baggage Warehouse
-CATERING_API_URL = "http://172.20.10.2:8008/v1/catering"    # Catering Truck
+CATERING_API_URL = "https://many-bugs-grow.loca.lt/v1/catering"    # Catering Truck
 
 # Модель данных для Check-In задачи
 class CheckInData(BaseModel):
@@ -55,7 +55,6 @@ tickets_for_checkin: Dict[str, List[dict]] = {}  # {flightId: [ticket, ticket, .
 def validate_ticket_and_flight(flightId: str, passengerId: str, ticketId: str) -> dict:
     logger.info(f"Начало проверки рейса {flightId} для пассажира {passengerId} с билетом {ticketId}")
     try:
-        # Проверка рейса через Information Panel
         flight_response = requests.get(f"{FLIGHTS_API_URL}/{flightId}")
         flight_response.raise_for_status()
         flight = flight_response.json()
@@ -63,10 +62,22 @@ def validate_ticket_and_flight(flightId: str, passengerId: str, ticketId: str) -
         if flight["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
             logger.error("Регистрация на рейс невозможна, статус рейса: " + flight["status"])
             raise HTTPException(status_code=400, detail="Регистрация на рейс невозможна")
-        # Проверка билета среди полученных для данного рейса
+
+        # Попытка получить билет из tickets_for_checkin
         valid_tickets = tickets_for_checkin.get(flightId, [])
-        logger.info(f"Список билетов для рейса {flightId}: {valid_tickets}")
+        if not valid_tickets:
+            logger.warning(f"Список билетов для рейса {flightId} пуст. Возможно, билеты не были переданы в Check-In.")
+            # Дополнительно можно попытаться получить билет напрямую или сообщить о необходимости обновить список билетов.
+            raise HTTPException(status_code=400, detail="Билет недействителен или подделан")
+
         ticket = next((t for t in valid_tickets if t["ticketId"] == ticketId), None)
+        if not ticket:
+            logger.error(f"Билет {ticketId} не найден в списке билетов для рейса {flightId}")
+            raise HTTPException(status_code=400, detail="Билет недействителен или подделан")
+        if ticket["status"] != "active" or ticket.get("isFake", False):
+            logger.error("Билет не соответствует требованиям регистрации")
+            raise HTTPException(status_code=400, detail="Билет не соответствует пассажиру или рейсу")
+
         if not ticket:
             logger.error(f"Билет {ticketId} не найден в списке билетов для рейса {flightId}")
             raise HTTPException(status_code=400, detail="Билет недействителен или подделан")
@@ -78,8 +89,6 @@ def validate_ticket_and_flight(flightId: str, passengerId: str, ticketId: str) -
         logger.error(f"Ошибка при проверке: {e}")
         raise HTTPException(status_code=503, detail="Ошибка проверки билета или рейса")
 
-# Создаем приложение Check-In
-app = FastAPI(title="Check-In Module")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -98,33 +107,6 @@ def receive_tickets(request: TicketsRequest = Body(...)):
     tickets_for_checkin[flightId] = request.tickets
     logger.info(f"Обновлен список билетов для рейса {flightId}: {tickets_for_checkin[flightId]}")
     return {"status": "success", "message": f"Получено {len(request.tickets)} билетов для рейса {flightId}"}
-
-# Функция проверки билета и рейса
-def validate_ticket_and_flight(flightId: str, passengerId: str, ticketId: str) -> dict:
-    logger.info(f"Начало проверки рейса {flightId} для пассажира {passengerId} с билетом {ticketId}")
-    try:
-        # Проверка рейса через Information Panel
-        flight_response = requests.get(f"{FLIGHTS_API_URL}/{flightId}")
-        flight_response.raise_for_status()
-        flight = flight_response.json()
-        logger.info(f"Получены данные о рейсе {flightId}: статус {flight.get('status')}")
-        if flight["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
-            logger.error("Регистрация на рейс невозможна, статус рейса: " + flight["status"])
-            raise HTTPException(status_code=400, detail="Регистрация на рейс невозможна")
-        # Проверка билета среди полученных для данного рейса
-        valid_tickets = tickets_for_checkin.get(flightId, [])
-        logger.info(f"Список билетов для рейса {flightId}: {valid_tickets} (количество: {len(valid_tickets)})")
-        ticket = next((t for t in valid_tickets if t["ticketId"] == ticketId), None)
-        if not ticket:
-            logger.error(f"Билет {ticketId} не найден в списке билетов для рейса {flightId}")
-            raise HTTPException(status_code=400, detail="Билет недействителен или подделан")
-        if ticket["passengerId"] != passengerId or ticket["flightId"] != flightId or ticket["status"] != "active":
-            logger.error("Билет не соответствует пассажиру или рейсу")
-            raise HTTPException(status_code=400, detail="Билет не соответствует пассажиру или рейсу")
-        return {"ticket": ticket, "flight": flight}
-    except requests.RequestException as e:
-        logger.error(f"Ошибка при проверке: {e}")
-        raise HTTPException(status_code=503, detail="Ошибка проверки билета или рейса")
 
 
 # Эндпоинт для начала регистрации пассажира
@@ -159,6 +141,21 @@ def start_checkin(request: CheckInRequest = Body(...)):
             )
             checkin_db[checkin_id] = checkin
             logger.info(f"Пассажир {request.passengerId} успешно зарегистрирован, checkInId: {checkin_id}")
+
+            # Проверяем, завершена ли регистрация на рейс
+            if is_registration_complete(request.flightId):
+                menu_summary = get_menu_for_flight(request.flightId)["menuSummary"]
+                logger.info(f"Все пассажиры рейса {request.flightId} зарегистрированы, отправляем меню: {menu_summary}")
+
+                try:
+                    response = requests.post(f"{CATERING_API_URL}/order",
+                                             json={"flightId": request.flightId, "menu": menu_summary})
+                    response.raise_for_status()
+                    logger.info(
+                        f"Меню для рейса {request.flightId} успешно отправлено в Catering Truck: {response.json()}")
+                except requests.RequestException as e:
+                    logger.error(f"Ошибка при отправке меню: {e}")
+
             return {"checkInId": checkin_id, "status": "Completed"}
         except HTTPException as exc:
             # Если ошибка связана с отсутствием билета (код 400), пробуем повторить регистрацию
@@ -246,39 +243,39 @@ def get_menu_for_flight(flightId: str):
 
 # Эндпоинт для отправки данных о меню в Catering Truck
 def is_registration_complete(flight_id: str) -> bool:
-    # Проверяем, все ли билеты для рейса зарегистрированы
-    tickets = tickets_for_checkin.get(flight_id, [])
-    registered = [c.passengerId for c in checkin_db.values() if c.flightId == flight_id]
-    return len(tickets) == len(registered)
+    tickets = [t["ticketId"] for t in tickets_for_checkin.get(flight_id, [])]
+    registered = [c.ticketId for c in checkin_db.values() if c.flightId == flight_id]
+    return set(tickets) == set(registered)
+
 
 @app.post("/v1/checkin/{checkInId}/menu", response_model=dict)
 def send_menu(checkInId: str):
     checkin = checkin_db.get(checkInId)
     if not checkin or checkin.taskType != "registration":
         raise HTTPException(status_code=404, detail="Регистрация не найдена или не завершена")
+
+    # Проверяем, завершена ли регистрация
     if not is_registration_complete(checkin.flightId):
-        raise HTTPException(status_code=400, detail="Регистрация рейса не завершена")
-    menu_data = {
-        "flightId": checkin.flightId,
-        "menu": {"chicken": 0, "pork": 0, "fish": 0, "vegetarian": 0}
-    }
-    for c in checkin_db.values():
-        if c.flightId == checkin.flightId and c.taskType == "registration":
-            meal = c.details.get("mealPreference", "chicken")
-            menu_data["menu"][meal] = menu_data["menu"].get(meal, 0) + 1
+        logger.warning(f"Попытка отправки меню на Catering Truck ДО завершения регистрации рейса {checkin.flightId}")
+        return {"status": "pending", "message": "Регистрация рейса еще не завершена"}
+
+    menu_data = get_menu_for_flight(checkin.flightId)["menuSummary"]
+
     try:
-        response = requests.post(f"{CATERING_API_URL}/order", json=menu_data)
+        response = requests.post(f"{CATERING_API_URL}/order", json={"flightId": checkin.flightId, "menu": menu_data})
         response.raise_for_status()
         logger.info(f"Данные о питании для рейса {checkin.flightId} отправлены в Catering Truck")
     except requests.RequestException as e:
         logger.error(f"Ошибка при отправке меню: {e}")
         raise HTTPException(status_code=503, detail="Ошибка при отправке данных о питании")
+
     return {
         "status": "success",
         "message": "Menu data sent",
         "flightId": checkin.flightId,
-        "menuSummary": menu_data["menu"]
+        "menuSummary": menu_data
     }
+
 
 if __name__ == "__main__":
     uvicorn.run("checkin_api:app", host="172.20.10.2", port=8006, reload=True)
