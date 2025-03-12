@@ -65,11 +65,11 @@ def update_flight_statuses():
         if flight.type == "depart":
             if minutes_left <= 0:
                 flight.status = "Departed"
-            elif minutes_left <= 5:
-                flight.status = "Boarding"
             elif minutes_left <= 10:
+                flight.status = "Boarding"
+            elif minutes_left <= 20:
                 flight.status = "RegistrationClosed"
-            elif minutes_left <= 40:
+            elif minutes_left <= 50:
                 flight.status = "RegistrationOpen"
             else:
                 flight.status = "Scheduled"
@@ -182,4 +182,5 @@ async def ui_tablo(request: Request):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("flights_api:app", host="localhost", port=8003, reload=True)  # Исправил хост на ваш предыдущий
+    uvicorn.run("flights_api:app", host="localhost", port=8008, reload=True)  # Исправил хост на ваш предыдущий
+    # порт 8003

@@ -235,13 +235,29 @@ def send_baggage(checkInId: str):
         raise HTTPException(status_code=503, detail="Ошибка при отправке багажа")
     return {"status": "success", "message": "Baggage sent to warehouse", "flightId": checkin.flightId}
 
+@app.get("/v1/checkin/{flightId}/menu", response_model=dict)
+def get_menu_for_flight(flightId: str):
+    menu_data = {"chicken": 0, "pork": 0, "fish": 0, "vegetarian": 0}
+    for checkin in checkin_db.values():
+        if checkin.flightId == flightId and checkin.taskType == "registration":
+            meal = checkin.details.get("mealPreference", "chicken")
+            menu_data[meal] = menu_data.get(meal, 0) + 1
+    return {"status": "success", "menuSummary": menu_data}
+
 # Эндпоинт для отправки данных о меню в Catering Truck
+def is_registration_complete(flight_id: str) -> bool:
+    # Проверяем, все ли билеты для рейса зарегистрированы
+    tickets = tickets_for_checkin.get(flight_id, [])
+    registered = [c.passengerId for c in checkin_db.values() if c.flightId == flight_id]
+    return len(tickets) == len(registered)
+
 @app.post("/v1/checkin/{checkInId}/menu", response_model=dict)
 def send_menu(checkInId: str):
     checkin = checkin_db.get(checkInId)
     if not checkin or checkin.taskType != "registration":
-        logger.error(f"Невозможно отправить данные о меню: регистрация {checkInId} не найдена или неверного типа")
         raise HTTPException(status_code=404, detail="Регистрация не найдена или не завершена")
+    if not is_registration_complete(checkin.flightId):
+        raise HTTPException(status_code=400, detail="Регистрация рейса не завершена")
     menu_data = {
         "flightId": checkin.flightId,
         "menu": {"chicken": 0, "pork": 0, "fish": 0, "vegetarian": 0}

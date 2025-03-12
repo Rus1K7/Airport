@@ -4,7 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Все модули обновлены" />
+    <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Все модули обновлены">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/catering_truck.py" beforeDir="false" afterPath="$PROJECT_DIR$/catering_truck.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flights_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/flights_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/time_control.py" beforeDir="false" afterPath="$PROJECT_DIR$/time_control.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -13,8 +18,8 @@
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
       <list>
-        <option value="Python Script" />
         <option value="HTML File" />
+        <option value="Python Script" />
       </list>
     </option>
   </component>
@@ -33,33 +38,34 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,
-    &quot;Python.check_in.executor&quot;: &quot;Run&quot;,
-    &quot;Python.checkin.executor&quot;: &quot;Run&quot;,
-    &quot;Python.checkin_api.executor&quot;: &quot;Run&quot;,
-    &quot;Python.db.executor&quot;: &quot;Run&quot;,
-    &quot;Python.flights_api.executor&quot;: &quot;Run&quot;,
-    &quot;Python.flights_api_v05032025.executor&quot;: &quot;Run&quot;,
-    &quot;Python.information_panel.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.passenger_api.executor&quot;: &quot;Run&quot;,
-    &quot;Python.passenger_generator.executor&quot;: &quot;Run&quot;,
-    &quot;Python.passengers_api.executor&quot;: &quot;Run&quot;,
-    &quot;Python.passengers_api_v05032025.executor&quot;: &quot;Run&quot;,
-    &quot;Python.run_all.executor&quot;: &quot;Run&quot;,
-    &quot;Python.ticket_sales.executor&quot;: &quot;Run&quot;,
-    &quot;Python.tickets_api.executor&quot;: &quot;Run&quot;,
-    &quot;Python.tickets_api_v05032025.executor&quot;: &quot;Run&quot;,
-    &quot;Python.time_control.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/PyProjects/Airport&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.sourceCode&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "DefaultHtmlFileTemplate": "HTML File",
+    "Python.catering_truck.executor": "Run",
+    "Python.check_in.executor": "Run",
+    "Python.checkin.executor": "Run",
+    "Python.checkin_api.executor": "Run",
+    "Python.db.executor": "Run",
+    "Python.flights_api.executor": "Run",
+    "Python.flights_api_v05032025.executor": "Run",
+    "Python.information_panel.executor": "Run",
+    "Python.main.executor": "Run",
+    "Python.passenger_api.executor": "Run",
+    "Python.passenger_generator.executor": "Run",
+    "Python.passengers_api.executor": "Run",
+    "Python.passengers_api_v05032025.executor": "Run",
+    "Python.run_all.executor": "Run",
+    "Python.ticket_sales.executor": "Run",
+    "Python.tickets_api.executor": "Run",
+    "Python.tickets_api_v05032025.executor": "Run",
+    "Python.time_control.executor": "Run",
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "D:/PyProjects/Airport",
+    "settings.editor.selected.configurable": "preferences.sourceCode"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -116,7 +122,23 @@
       <option name="project" value="LOCAL" />
       <updated>1741721083764</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Все модули обновлены">
+      <option name="closed" value="true" />
+      <created>1741721859089</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1741721859089</updated>
+    </task>
+    <task id="LOCAL-00007" summary="Все модули обновлены">
+      <option name="closed" value="true" />
+      <created>1741782434528</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1741782434528</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

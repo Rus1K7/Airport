@@ -196,7 +196,7 @@ def generate_passenger():
 # Автоматическая регистрация пассажиров
 def auto_checkin_passengers():
     logger.debug(f"Запуск автоматической регистрации, пассажиров: {len(passengers_db)}")
-    for passenger in passengers_db.values():
+    for passenger in list(passengers_db.values()):  # Используем list для создания копии
         if passenger.state == "GotTicket":
             try:
                 flight_data = check_flight(passenger.flightId)
@@ -215,12 +215,11 @@ def auto_checkin_passengers():
             except requests.RequestException as e:
                 logger.error(f"Ошибка автоматической регистрации {passenger.name}: {e}")
 
-
 # Инициализация планировщика
 scheduler = BackgroundScheduler()
-scheduler.add_job(generate_passenger, 'interval', seconds=2)
+scheduler.add_job(generate_passenger, 'interval', seconds=3)
 scheduler.add_job(print_passengers_table, 'interval', seconds=60)
-scheduler.add_job(auto_checkin_passengers, 'interval', seconds=2)
+scheduler.add_job(auto_checkin_passengers, 'interval', seconds=3)
 
 
 # Запуск приложения
@@ -333,15 +332,13 @@ def update_passenger_ticket(passenger):
         response = requests.get(f"http://172.20.10.2:8005/v1/tickets/passenger/{passenger.id}")
         response.raise_for_status()
         tickets = response.json()
-        # Фильтруем только активные билеты
         active_tickets = [t for t in tickets if t["status"] == "active"]
         if active_tickets:
-            passenger.ticket = active_tickets[0]
+            passenger.ticket = Ticket(**active_tickets[0])  # Преобразуем словарь в объект Ticket
         else:
             passenger.ticket = None
     except Exception as e:
         logger.error(f"Ошибка обновления билета для пассажира {passenger.id}: {e}")
-
 
 # UI: Главная страница
 @app.get("/ui", response_class=HTMLResponse)
@@ -403,7 +400,6 @@ async def ui_create_bulk_passengers(request: Request, bulk_count: int = Form(...
 # UI: Массовая регистрация всех пассажиров рейса
 @app.post("/ui/register_all", response_class=RedirectResponse)
 async def ui_register_all(request: Request, flightId: str = Form(...)):
-    # Проверяем статус рейса (регистрация возможна, если статус RegistrationOpen или RegistrationClosed)
     flight_data = check_flight(flightId)
     if flight_data["status"] not in ["RegistrationOpen", "RegistrationClosed"]:
         raise HTTPException(
@@ -415,16 +411,18 @@ async def ui_register_all(request: Request, flightId: str = Form(...)):
     for passenger in passengers_db.values():
         if passenger.flightId == flightId and passenger.state == "GotTicket" and passenger.ticket:
             try:
+                # Проверяем, является ли ticket словарем, и преобразуем в объект Ticket
+                if isinstance(passenger.ticket, dict):
+                    passenger.ticket = Ticket(**passenger.ticket)
                 checkin_response = requests.post(f"{CHECKIN_API_URL}/start", json={
                     "flightId": passenger.flightId,
                     "passengerId": passenger.id,
-                    "ticketId": passenger.ticket.ticketId
+                    "ticketId": passenger.ticket.ticketId  # Теперь ticketId доступен
                 })
                 checkin_response.raise_for_status()
                 checkin_data = checkin_response.json()
                 passenger.state = "CheckedIn"
                 logger.info(f"Пассажир {passenger.name} зарегистрирован, checkInId: {checkin_data['checkInId']}")
-                # После успешной регистрации обновляем состояние, например, на ReadyForBus
                 passenger.state = "ReadyForBus"
                 count_registered += 1
             except requests.RequestException as e:
