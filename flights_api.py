@@ -66,9 +66,9 @@ def update_flight_statuses():
         if flight.type == "depart":
             if minutes_left <= 0:
                 flight.status = "Departed"
-            elif minutes_left <= 10:
-                flight.status = "Boarding"
             elif minutes_left <= 20:
+                flight.status = "Boarding"
+            elif minutes_left <= 25:
                 flight.status = "RegistrationClosed"
             elif minutes_left <= 50:
                 flight.status = "RegistrationOpen"

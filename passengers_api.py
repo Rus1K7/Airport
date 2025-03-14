@@ -267,6 +267,7 @@ def buy_new_ticket(passenger):
 
         # Убираем подделанный билет, если он был
         passenger.forgedTicket = None
+        ticket_data["isFake"] = False
 
         logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) купил новый билет {ticket_data['ticketId']}")
 
@@ -287,7 +288,7 @@ def update_passenger_status_after_registration():
                 flight_data = check_flight(passenger.flightId)
                 checked_flights[passenger.flightId] = flight_data["status"]  # Запоминаем статус рейса
 
-            if checked_flights[passenger.flightId] == "RegistrationClosed":
+            if checked_flights[passenger.flightId] == "RegistrationClosed" or checked_flights[passenger.flightId] == "Departed":
                 passenger.state = "CameToAirport"
 
                 # Запускаем покупку нового билета через 10 секунд

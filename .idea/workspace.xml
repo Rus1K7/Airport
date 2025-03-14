@@ -4,15 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Все модули обновлены">
+    <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.idea/workspace.xml&#10;#&#9;catering_truck.py">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/catering_truck.py" beforeDir="false" afterPath="$PROJECT_DIR$/catering_truck.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/checkin_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/checkin_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db.py" beforeDir="false" afterPath="$PROJECT_DIR$/db.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/flights_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/flights_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/passengers_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/passengers_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tickets_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tickets_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/tablo.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/tablo.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/time_control.py" beforeDir="false" afterPath="$PROJECT_DIR$/time_control.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -151,7 +150,15 @@
       <option name="project" value="LOCAL" />
       <updated>1741794423607</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.idea/workspace.xml&#10;#&#9;catering_truck.py">
+      <option name="closed" value="true" />
+      <created>1741986444716</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1741986444716</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -168,6 +175,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Все модули на всякий случай" />
     <MESSAGE value="Все модули обновлены" />
-    <option name="LAST_COMMIT_MESSAGE" value="Все модули обновлены" />
+    <MESSAGE value="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.idea/workspace.xml&#10;#&#9;catering_truck.py" />
+    <option name="LAST_COMMIT_MESSAGE" value="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.idea/workspace.xml&#10;#&#9;catering_truck.py" />
   </component>
 </project>
