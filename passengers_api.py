@@ -24,7 +24,8 @@ logger = logging.getLogger("PassengersAPI")
 TABLO_API_URL = "http://localhost:8003/v1/flights"  # Табло
 
 # TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"
-TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets/buy"
+TICKETS_URL = "http://172.20.10.2:8005/v1"
+TICKETS_API_URL = f"{TICKETS_URL}/tickets/buy"
 CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"
 
 
@@ -267,6 +268,7 @@ def buy_new_ticket(passenger):
 
         # Убираем подделанный билет, если он был
         passenger.forgedTicket = None
+        ticket_data["isFake"] = False
 
         logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) купил новый билет {ticket_data['ticketId']}")
 
@@ -287,7 +289,7 @@ def update_passenger_status_after_registration():
                 flight_data = check_flight(passenger.flightId)
                 checked_flights[passenger.flightId] = flight_data["status"]  # Запоминаем статус рейса
 
-            if checked_flights[passenger.flightId] == "RegistrationClosed":
+            if checked_flights[passenger.flightId] == "RegistrationClosed" or checked_flights[passenger.flightId] == "Departed":
                 passenger.state = "CameToAirport"
 
                 # Запускаем покупку нового билета через 10 секунд
@@ -460,7 +462,7 @@ def get_reg_flights() -> List[dict]:
 
 def update_passenger_ticket(passenger):
     try:
-        response = requests.get(f"http://172.20.10.2:8005/v1/tickets/passenger/{passenger.id}")
+        response = requests.get(f"{TICKETS_URL}/tickets/passenger/{passenger.id}")
         response.raise_for_status()
         tickets = response.json()
         active_tickets = [t for t in tickets if t["status"] == "active"]

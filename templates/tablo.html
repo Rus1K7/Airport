@@ -43,10 +43,10 @@
         .status {
             font-weight: bold;
         }
-        .status.scheduled { color: #00ff00; }
+        .status.scheduled { color: #00FF00; }
         .status.delayed { color: #ff0000; }
-        .status.departed { color: #00ffff; }
-        .status.arrived { color: #ffff00; }
+        .status.departed { color: #0000FF; }
+        .status.arrived { color: #800080; }
     </style>
     <script>
         // Функция для обновления текущего игрового времени
@@ -102,6 +102,8 @@
                 case "RegistrationOpen": return "Открыта регистрация";
                 case "RegistrationClosed": return "Регистрация закрыта";
                 case "Boarding": return "Посадка";
+                case "PlanningArrive": return "По расписанию прилетает";
+
                 default: return status;
             }
         }

@@ -88,7 +88,7 @@
               <td>{{ p.isVIP }}</td>
               <td>
                 {% if p.forgedTicket %}
-                  {{ p.forgedTicket.ticketId }} <span class="badge bg-danger">Подделан</span>
+                {{ p.forgedTicket.ticketId }} <span class="badge bg-danger">Подделан</span>
                 {% elif p.ticket %}
                   {{ p.ticket.ticketId }}
                 {% else %}

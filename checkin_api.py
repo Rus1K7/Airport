@@ -20,7 +20,9 @@ TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets"
 FLIGHTS_API_URL = "http://localhost:8003/v1/flights"  # Табло
 
 BAGGAGE_API_URL = "http://172.20.10.2:8007/v1/baggage"      # Baggage Warehouse
-CATERING_API_URL = "https://many-bugs-grow.loca.lt/v1/catering"    # Catering Truck
+BAGGAGE_TRACK_API_URL = "http://localhost:8011/v1/baggage-track"  # Замените на актуальный адрес
+
+CATERING_API_URL = "http://small-doors-punch.loca.lt/v1/catering"    # Catering Truck
 
 # Модель данных для Check-In задачи
 class CheckInData(BaseModel):
@@ -156,6 +158,25 @@ def start_checkin(request: CheckInRequest = Body(...)):
                 except requests.RequestException as e:
                     logger.error(f"Ошибка при отправке меню: {e}")
 
+            logger.info(f"Пассажир {request.passengerId} успешно зарегистрирован, checkInId: {checkin_id}")
+
+            # Автоматическая отправка багажа в Baggage Track
+            try:
+                baggage_data = {
+                    "flightId": request.flightId,
+                    "passengerId": request.passengerId,
+                    "ticketId": request.ticketId,
+                    "baggageWeight": ticket.get("baggageWeight", 0),
+                    "baggageItems": ticket.get("baggageItems", [])
+                }
+
+                response = requests.post(f"{BAGGAGE_TRACK_API_URL}/register", json=baggage_data)
+                response.raise_for_status()
+                logger.info(f"Багаж пассажира {request.passengerId} успешно отправлен в Baggage Track.")
+
+            except requests.RequestException as e:
+                logger.error(f"Ошибка при отправке багажа в Baggage Track: {e}")
+
             return {"checkInId": checkin_id, "status": "Completed"}
         except HTTPException as exc:
             # Если ошибка связана с отсутствием билета (код 400), пробуем повторить регистрацию
@@ -232,6 +253,47 @@ def send_baggage(checkInId: str):
         raise HTTPException(status_code=503, detail="Ошибка при отправке багажа")
     return {"status": "success", "message": "Baggage sent to warehouse", "flightId": checkin.flightId}
 
+@app.post("/v1/checkin/{checkInId}/baggage-track", response_model=dict)
+def send_baggage_to_track(checkInId: str):
+    """
+    Отправляет данные о багаже пассажира в Baggage Track после регистрации.
+    """
+    checkin = checkin_db.get(checkInId)
+    if not checkin or checkin.taskType != "registration":
+        logger.error(f"Ошибка: регистрация с ID {checkInId} не найдена или неверного типа")
+        raise HTTPException(status_code=404, detail="Регистрация не найдена или не завершена")
+
+    # Получаем данные о пассажире
+    try:
+        passenger_response = requests.get(f"{PASSENGERS_API_URL}/{checkin.passengerId}")
+        passenger_response.raise_for_status()
+        passenger = passenger_response.json()
+        logger.info(f"Данные о пассажире {checkin.passengerId} получены")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при получении данных пассажира {checkin.passengerId}: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка получения данных пассажира")
+
+    # Формируем данные о багаже для `Baggage Track`
+    baggage_data = {
+        "flightId": checkin.flightId,
+        "passengerId": checkin.passengerId,
+        "ticketId": checkin.ticketId,
+        "baggageWeight": passenger.get("baggageWeight", 0),
+        "baggageItems": passenger.get("baggageItems", []) or []  # Исправление: если `None`, передаём []
+    }
+
+    # Отправляем данные в Baggage Track
+    try:
+        response = requests.post(f"{BAGGAGE_TRACK_API_URL}/register", json=baggage_data)
+        response.raise_for_status()
+        logger.info(f"Багаж пассажира {checkin.passengerId} отправлен в Baggage Track")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при отправке багажа в Baggage Track: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка при отправке данных о багаже в Baggage Track")
+
+    return {"status": "success", "message": "Baggage sent to Baggage Track", "flightId": checkin.flightId}
+
+
 @app.get("/v1/checkin/{flightId}/menu", response_model=dict)
 def get_menu_for_flight(flightId: str):
     menu_data = {"chicken": 0, "pork": 0, "fish": 0, "vegetarian": 0}
@@ -242,10 +304,22 @@ def get_menu_for_flight(flightId: str):
     return {"status": "success", "menuSummary": menu_data}
 
 # Эндпоинт для отправки данных о меню в Catering Truck
-def is_registration_complete(flight_id: str) -> bool:
+"""def is_registration_complete(flight_id: str) -> bool:
     tickets = [t["ticketId"] for t in tickets_for_checkin.get(flight_id, [])]
     registered = [c.ticketId for c in checkin_db.values() if c.flightId == flight_id]
-    return set(tickets) == set(registered)
+    return set(tickets) == set(registered)"""
+
+
+def is_registration_complete(flight_id: str) -> bool:
+    tickets = {t["ticketId"] for t in tickets_for_checkin.get(flight_id, [])}
+    registered = {c.ticketId for c in checkin_db.values() if c.flightId == flight_id}
+
+    if not tickets:
+        logger.warning(f"Билеты для рейса {flight_id} ещё не загружены. Регистрация не завершена.")
+        return False  # Если нет билетов, считаем, что регистрация не завершена
+
+    return tickets == registered
+
 
 
 @app.post("/v1/checkin/{checkInId}/menu", response_model=dict)
