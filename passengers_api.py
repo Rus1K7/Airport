@@ -24,9 +24,9 @@ logger = logging.getLogger("PassengersAPI")
 TABLO_API_URL = "http://localhost:8003/v1/flights"  # Табло
 
 # TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"
-TICKETS_URL = "http://172.20.10.2:8005/v1"
+TICKETS_URL = "http://172.20.10.3:8005/v1"
 TICKETS_API_URL = f"{TICKETS_URL}/tickets/buy"
-CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"
+CHECKIN_API_URL = "http://localhost:8006/v1/checkin"
 
 
 # Модель данных для билета
@@ -261,13 +261,11 @@ def buy_new_ticket(passenger):
         ticket_response.raise_for_status()
         ticket_data = ticket_response.json()
 
-        # Новый билет должен быть настоящим
+        # Новый билет становится основным, подделка удаляется
         passenger.ticket = Ticket(**ticket_data)
         passenger.flightId = new_flight
         passenger.state = "GotTicket"
-
-        # Убираем подделанный билет, если он был
-        passenger.forgedTicket = None
+        passenger.forgedTicket = None  # Сбрасываем forgedTicket
         ticket_data["isFake"] = False
 
         logger.info(f"Пассажир {passenger.name} (ID: {passenger.id}) купил новый билет {ticket_data['ticketId']}")
@@ -469,6 +467,10 @@ def update_passenger_ticket(passenger):
         # Если у пассажира уже есть forgedTicket, не меняем его
         if active_tickets and not passenger.forgedTicket:
             passenger.ticket = Ticket(**active_tickets[0])
+            # Получаем актуальные данные рейса из Табло
+            flight_data = check_flight(passenger.flightId)
+            # Обновляем время отправления в билете, чтобы оно совпадало с табло
+            passenger.ticket.flightDepartureTime = flight_data.get("scheduledTime")
         elif not active_tickets:
             passenger.ticket = None
     except Exception as e:

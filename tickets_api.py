@@ -17,7 +17,7 @@ logger = logging.getLogger("TicketsAPI")
 TABLO_API_URL = "http://localhost:8003/v1/flights"  # Табло
 
 # TABLO_API_URL = "http://172.20.10.2:8003/v1/flights"  # Табло
-CHECKIN_API_URL = "http://172.20.10.2:8006/v1/checkin"  # Check-In
+CHECKIN_API_URL = "http://localhost:8006/v1/checkin"  # Check-In
 MAX_TICKETS_PER_FLIGHT = 100
 
 # Модель для запроса покупки билета

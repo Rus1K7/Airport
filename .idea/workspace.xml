@@ -5,12 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7ec02db0-a52f-448b-a964-f4c3f72da86e" name="Changes" comment="Merge remote-tracking branch 'origin/main'&#10;&#10;# Conflicts:&#10;#&#9;.idea/workspace.xml&#10;#&#9;catering_truck.py">
+      <change afterPath="$PROJECT_DIR$/datamodel.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/followme.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/main (3).py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/checkin_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/checkin_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/db.py" beforeDir="false" afterPath="$PROJECT_DIR$/db.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/flights_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/flights_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/passengers_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/passengers_api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/tablo.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/tablo.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tickets_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tickets_api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/time_control.py" beforeDir="false" afterPath="$PROJECT_DIR$/time_control.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -54,7 +56,9 @@
     &quot;Python.db.executor&quot;: &quot;Run&quot;,
     &quot;Python.flights_api.executor&quot;: &quot;Run&quot;,
     &quot;Python.flights_api_v05032025.executor&quot;: &quot;Run&quot;,
+    &quot;Python.followme.executor&quot;: &quot;Run&quot;,
     &quot;Python.information_panel.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main (3).executor&quot;: &quot;Run&quot;,
     &quot;Python.main.executor&quot;: &quot;Run&quot;,
     &quot;Python.passenger_api.executor&quot;: &quot;Run&quot;,
     &quot;Python.passenger_generator.executor&quot;: &quot;Run&quot;,
@@ -72,6 +76,11 @@
     &quot;settings.editor.selected.configurable&quot;: &quot;preferences.sourceCode&quot;
   }
 }</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\PyProjects\Airport" />
+    </key>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>

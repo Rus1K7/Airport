@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("TimeControl")
 
 simulation_time = datetime(2025, 3, 15, 7, 17)
-time_speed_multiplier = 60 * 0.5  # 1 минут игрового времени за 1 секунду реального
+time_speed_multiplier = 20  # 1 минут игрового времени за 1 секунду реального
 
 
 def update_simulation_time():

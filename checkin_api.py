@@ -14,7 +14,7 @@ logger = logging.getLogger("CheckInAPI")
 
 # URL модулей (укажите корректные адреса)
 PASSENGERS_API_URL = "http://localhost:8004/v1/passengers"
-TICKETS_API_URL = "http://172.20.10.2:8005/v1/tickets"
+TICKETS_API_URL = "http://172.20.10.3:8005/v1/tickets"
 
 # FLIGHTS_API_URL = "http://172.20.10.2:8003/v1/flights"
 FLIGHTS_API_URL = "http://localhost:8003/v1/flights"  # Табло
@@ -22,7 +22,7 @@ FLIGHTS_API_URL = "http://localhost:8003/v1/flights"  # Табло
 BAGGAGE_API_URL = "http://172.20.10.2:8007/v1/baggage"      # Baggage Warehouse
 BAGGAGE_TRACK_API_URL = "http://localhost:8011/v1/baggage-track"  # Замените на актуальный адрес
 
-CATERING_API_URL = "http://small-doors-punch.loca.lt/v1/catering"    # Catering Truck
+CATERING_API_URL = "https://late-horses-lick.loca.lt/v1/catering"    # Catering Truck
 
 # Модель данных для Check-In задачи
 class CheckInData(BaseModel):
@@ -220,6 +220,39 @@ def update_checkin(checkInId: str, status: str = Body(..., embed=True)):
     logger.info(f"Статус регистрации {checkInId} обновлён на {status}")
     return checkin
 
+from fastapi import Body
+
+@app.post("/v1/checkin/{flightId}/baggage-drop", response_model=dict)
+def send_baggage_for_flight(flightId: str, payload: dict = Body(...)):
+    """
+    Отправка данных о багаже для всего рейса.
+    Ожидается, что payload содержит ключ "baggageList", представляющий словарь с данными по багажу.
+    """
+    baggage_list = payload.get("baggageList", {})
+    try:
+        response = requests.post(
+            f"{BAGGAGE_API_URL}/store",
+            json={"flightId": flightId, "baggageList": baggage_list}
+        )
+        response.raise_for_status()
+        logger.info(f"Багаж для рейса {flightId} отправлен в Baggage Warehouse")
+    except requests.RequestException as e:
+        logger.error(f"Ошибка при отправке багажа: {e}")
+        raise HTTPException(status_code=503, detail="Ошибка при отправке багажа")
+    return {"status": "success", "message": "Baggage sent to warehouse", "flightId": flightId}
+
+def send_baggage_data(self, flight_id: str, baggage_list: dict) -> bool:
+    try:
+        response = requests.post(
+            f"{self.base_url}/v1/checkin/{flight_id}/baggage-drop",
+            json={"baggageList": baggage_list},
+            timeout=5
+        )
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Baggage data error: {str(e)}")
+
 # Эндпоинт для отправки багажа в Baggage Warehouse
 @app.post("/v1/checkin/{checkInId}/baggage", response_model=dict)
 def send_baggage(checkInId: str):
@@ -352,4 +385,4 @@ def send_menu(checkInId: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run("checkin_api:app", host="172.20.10.2", port=8006, reload=True)
+    uvicorn.run("checkin_api:app", host="localhost", port=8006, reload=True)

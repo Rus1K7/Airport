@@ -21,7 +21,9 @@ QUEUE_NAME = "flight.status.changed"
 
 import requests
 
-BOARD_URL = "https://plain-guests-wonder.loca.lt/v1/board/initialize"  # или актуальный URL board-сервиса
+# BOARD_URL = "http://localhost:8009/v1/board/initialize"  # или актуальный URL board-сервиса
+BOARD_URL = "https://clean-suns-judge.loca.lt/v1/board/initialize"
+
 
 def notify_board(flight: FlightData):
     data = {
@@ -116,7 +118,7 @@ def update_flight_statuses():
     logger.info(f"Статусы рейсов обновлены (Время: {sim_time.strftime('%Y-%m-%d %H:%M:%S')})")
 
 
-scheduler.add_job(update_flight_statuses, 'interval', seconds=5, max_instances=3)
+scheduler.add_job(update_flight_statuses, 'interval', seconds=5, max_instances=2)
 
 
 @asynccontextmanager
